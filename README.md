@@ -1,2 +1,4 @@
-# My dotfiles and other misc configurations
+# My dotfiles 
+
+and other misc configurations
 
