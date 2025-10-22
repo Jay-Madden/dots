@@ -8,6 +8,9 @@
 !nvim/
 !nvim/*
 
+!zsh/
+!zsh/*
+
 !wezterm/
 !wezterm/*
 

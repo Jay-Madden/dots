@@ -1,0 +1,5 @@
+# Ignore misc zsh dotdir files
+.zcompdump*
+
+# Do not commit out history files
+.zsh_history
