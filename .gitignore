@@ -3,6 +3,10 @@
 
 # Except these
 !.gitignore
+!README.md
+
+!nvim/
+!nvim/*
 
 !wezterm/
 !wezterm/*
