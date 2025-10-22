@@ -6,7 +6,7 @@ and other misc configurations
 
 In order to bootstrap the zsh configuration we have to redirect to the XDG config paths
 
-* Set ZDOTDIR in the root .zshenv
+* Set `ZDOTDIR` in the root `.zshenv`
     ```bash
     cat << EOF
     export XDG_CONFIG_HOME=${XDG_CONFIG_HOME:=${HOME}/.config}
