@@ -1,0 +1,14 @@
+# Ignore everything
+*
+
+# Except these
+!.gitignore
+
+!wezterm/
+!wezterm/*
+
+!atuin/
+!atuin/*
+
+!tmux/
+!tmux/*
