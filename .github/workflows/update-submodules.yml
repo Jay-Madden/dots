@@ -1,0 +1,57 @@
+name: Update Submodules
+
+on:
+  schedule:
+    # Run daily at 2:00 AM UTC (adjust timezone as needed)
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  update-submodules:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+        fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "Jay Madden"
+        git config --global user.email "jaymaddencox@gmail.com"
+
+    - name: Update submodules to latest commits
+      run: |
+        # Update all submodules to their latest commits
+        git submodule update --remote --merge
+        
+        # Check if there are any changes
+        if git diff --quiet; then
+          echo "No submodule updates available"
+          exit 0
+        fi
+
+    - name: Commit and push changes
+      run: |
+        # Add all submodule changes
+        git add .
+
+        # Check if there are staged changes
+        if git diff --cached --quiet; then
+          echo "No changes to commit"
+          exit 0
+        fi
+
+        # Commit the changes
+        git commit -m "chore: update submodules to latest commits [skip ci]"
+        
+        # Push changes to master branch
+        git push origin master
+
+    - name: Summary
+      run: |
+        echo "Submodule update completed successfully"
+        echo "Changes have been committed and pushed to master branch"
