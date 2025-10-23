@@ -9,6 +9,9 @@ on:
 jobs:
   update-submodules:
     runs-on: ubuntu-latest
+    permissions:
+      # Give the default GITHUB_TOKEN write permission to commit and push
+      contents: write
 
     steps:
     - name: Checkout repository
