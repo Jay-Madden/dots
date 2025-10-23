@@ -25,3 +25,7 @@ In order to bootstrap the zsh configuration we have to redirect to the XDG confi
     ```
     exec zsh
     ```
+
+## Required components
+
+* zoxide `brew install zoxide`
