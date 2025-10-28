@@ -146,6 +146,9 @@ eval "$(atuin init zsh)"
 #Compilation flags
 # export ARCHFLAGS="-arch x86_64"
 
+# Export config repo to '.config'
+export XDG_CONFIG_HOME="$HOME/.config"
+
 # Set zsh-autosuggestions color style
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=23'
 
