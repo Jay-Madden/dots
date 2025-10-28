@@ -43,7 +43,16 @@ ZVM_VI_INSERT_ESCAPE_BINDKEY=jj
 # load a random theme each time oh-my-zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
-ZSH_THEME="spaceship"
+# ZSH_THEME="spaceship"
+
+# Enable kubernetes support in prompt
+# SPACESHIP_KUBECTL_SHOW=true
+# SPACESHIP_KUBECTL_CONTEXT_SHOW=true
+# SPACESHIP_KUBECTL_VERSION_SHOW=false
+
+# Initialize starship prompt
+eval "$(starship init zsh)"
+export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
 
 
 # Set list of themes to pick from when loading at random
@@ -54,11 +63,6 @@ ZSH_THEME="spaceship"
 
 # Uncomment the following line to use case-sensitive completion.
 # CASE_SENSITIVE="true"
-
-# Enable kubernetes support in prompt
-SPACESHIP_KUBECTL_SHOW=true
-SPACESHIP_KUBECTL_CONTEXT_SHOW=true
-SPACESHIP_KUBECTL_VERSION_SHOW=false
 
 # Uncomment the following line to use hyphen-insensitive completion.
 # Case-sensitive completion must be off. _ and - will be interchangeable.
