@@ -8,10 +8,15 @@ $git_commit\
 $go\
 $python\
 $kubernetes\
+$cmd_duration\
 $line_break\
 $shell\
 $character\
 """
+
+[cmd_duration]
+disabled = false
+format = "took [$duration]($style) "
 
 [kubernetes]
 format = "[☸ ($context )](blue)"
