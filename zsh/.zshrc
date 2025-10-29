@@ -195,10 +195,10 @@ source <(kubectl completion zsh)
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
 if type eza >/dev/null 2>&1; then
-    alias ls='eza -alg --icons --color=always --group-directories-first --git'
-    alias ll='eza -aliSgh --icons --color=always --group-directories-first --git'
-    alias lt='eza -@alT --icons --color=always --git'
-    alias lr='eza -alg --icons --sort=modified --color=always --group-directories-first --git'
+    alias ls='eza -alg --icons --color=always --group-directories-first'
+    alias ll='eza -aliSgh --icons --color=always --group-directories-first'
+    alias lt='eza -@alT --icons --color=always'
+    alias lr='eza -alg --icons --sort=modified --color=always --group-directories-first'
 else
     alias l='ls -alh --group-directories-first'
     alias ll='ls -al --group-directories-first'
@@ -237,6 +237,10 @@ export WEZTERM_CONFIG_FILE="$HOME/.config/wezterm/wezterm.lua"
 export PATH="$HOME/.local/bin:$PATH"
 
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
+
 export PATH="$HOME/go/bin:$PATH"
+
+# Add krew to path
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 export GPG_TTY=$(tty)
