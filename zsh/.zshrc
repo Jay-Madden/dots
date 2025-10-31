@@ -186,11 +186,64 @@ alias lg='lazygit'
 
 # neovim aliases
 alias ovim='/usr/bin/vim'
-alias vim='nvim'
+vim() {
+    local current_dir=$(pwd -P)
+    local resumed=0
+    IFS=''
+
+    echo "we ran!"
+    local job_lines=("${(@f)$(jobs -l)}")
+    for job_line in "${job_lines[@]}"; do
+        echo "hoi $job_line"
+        if [[ "$job_line" =~ "([Ss]uspended|[Ii]nterrupted|[Rr]unning)" ]]; then
+            echo "hi $job_line"
+            # Extract PID from job_line using zsh match[]
+			if [[ "$job_line" =~ '\[[0-9]+\][[:space:]]+.[[:space:]]+([0-9]+)' ]]; then
+				local job_pid="${match[1]}"
+				echo "Found job_pid: $job_pid"
+			else
+				continue
+			fi
+
+            if [ -z "$job_pid" ] || ! kill -0 "$job_pid" 2>/dev/null; then
+                continue
+            fi
+            
+            local job_cwd=$(lsof -a -p $job_pid -d cwd | awk 'NR==2 {print $9}')
+            
+            if [ -z "$job_cwd" ]; then
+                continue
+            fi
+            
+            # Extract job number from the line
+            if [[ "$job_line" =~ "^\[([-1-9]+)\]" ]]; then
+                local job_num="${match[1]}"
+            else
+                continue
+            fi
+            
+            echo "job_cwd: $job_cwd, current_dir: $current_dir, job_num: $job_num"
+            if [ "$job_cwd" = "$current_dir" ]; then
+                fg %"$job_num" 2>/dev/null
+                resumed=1
+                break
+            fi
+        fi
+    done 
+    
+    # If no matching suspended job was found, start a new nvim
+    if [ $resumed -eq 0 ]; then
+        echo "All variables: resumed=$resumed, current_dir=$current_dir"
+        nvim "$@"
+    fi
+}
 
 # Kubernetes aliases
 alias k='kubectl'
 source <(kubectl completion zsh)
+
+# Simple cluster selector
+alias cs="export KUBECONFIG=\$(fd 'cluster-.*' $HOME/.kube | fzf)"
 
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
