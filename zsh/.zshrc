@@ -4,15 +4,6 @@
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
-#Add dotnet to $PATH
-export PATH="/usr/local/share/dotnet:$PATH"
-
-# Add dotnet tools to path
-export PATH="$PATH:$HOME/.dotnet/tools"
-
-#Add GO to $PATH
-export PATH="$PATH:/usr/local/go/bin"
-
 # Add nvm to path
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
@@ -289,7 +280,14 @@ export PATH="/opt/homebrew/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 
-export PATH="$HOME/go/bin:$PATH"
+#Add dotnet to $PATH
+export PATH="/usr/local/share/dotnet:$PATH"
+
+# Add dotnet tools to path
+export PATH="$PATH:$HOME/.dotnet/tools"
+
+#Add GO to $PATH
+export PATH="$PATH:/usr/local/go/bin"
 
 # Add krew to path
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
