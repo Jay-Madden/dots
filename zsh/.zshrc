@@ -285,8 +285,8 @@ export EDITOR="nvim"
 export WEZTERM_CONFIG_DIR="$HOME/.config/wezterm"
 export WEZTERM_CONFIG_FILE="$HOME/.config/wezterm/wezterm.lua"
 
+export PATH="/opt/homebrew/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
-
 export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 
 export PATH="$HOME/go/bin:$PATH"
