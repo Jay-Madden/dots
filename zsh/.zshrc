@@ -227,6 +227,42 @@ vim() {
     fi
 }
 
+# Custom watch function using raw ANSI termcodes
+# Usage: watch <command> [args...]
+watch() {
+  local interval=2 # Default to 2 seconds
+  local output=""
+
+  if [[ $# -eq 0 ]]; then
+    echo "Usage: watch <command> [args...]"
+    return 1
+  fi
+
+  echo "watch: Press Ctrl+C to exit"
+
+  while :; do
+    # Run the command and capture its output (stderr is redirected to stdout for visibility)
+    output=$("$@" 2>&1)
+
+    # Check if there is output
+    if [[ -n "$output" ]]; then
+      # Use printf with ANSI escape codes to clear screen and move cursor home
+      # \033[2J clears screen, \033[H moves cursor to top-left
+      printf "\033[2J\033[H"
+
+      # Print the command being run and the current time as a header
+      echo "Every $interval.0s: $*"
+      echo "$(date)"
+      echo "--------------------------------------------------------"
+
+      # Print the captured command output
+      echo "$output"
+    fi
+
+    sleep $interval
+  done
+}
+
 # Kubernetes aliases
 alias k='kubectl'
 source <(kubectl completion zsh)
