@@ -167,7 +167,7 @@ bindkey '\t' menu-complete
 export BAT_THEME="1337"
 alias cat='bat --paging=never'
 
-alias ls='exa'
+alias ls='eza'
 alias c='clear'
 alias python='python3'
 alias h='atuin history list'
