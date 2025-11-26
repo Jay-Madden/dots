@@ -174,6 +174,7 @@ alias h='atuin history list'
 alias cd='z'
 alias cdi='zi'
 alias lg='lazygit'
+alias cursor='cursor-agent'
 
 # neovim aliases
 alias ovim='/usr/bin/vim'
@@ -268,7 +269,7 @@ alias k='kubectl'
 source <(kubectl completion zsh)
 
 # Simple cluster selector
-alias cs="export KUBECONFIG=\$(fd 'cluster-.*' $HOME/.kube | fzf)"
+alias cs="export KUBECONFIG=\$(fd '.*' $HOME/.kube/configs/* | tv --ui-scale 40)"
 
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
@@ -323,7 +324,7 @@ export PATH="/usr/local/share/dotnet:$PATH"
 export PATH="$PATH:$HOME/.dotnet/tools"
 
 #Add GO to $PATH
-export PATH="$PATH:/usr/local/go/bin"
+export PATH="$PATH:$HOME/go/bin"
 
 # Add krew to path
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
