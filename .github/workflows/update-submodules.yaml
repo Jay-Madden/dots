@@ -10,7 +10,6 @@ jobs:
   update-submodules:
     runs-on: ubuntu-latest
     permissions:
-      # Give the default GITHUB_TOKEN write permission to commit and push
       contents: write
 
     steps:
@@ -28,10 +27,8 @@ jobs:
 
     - name: Update submodules to latest commits
       run: |
-        # Update all submodules to their latest commits
         git submodule update --remote --merge
         
-        # Check if there are any changes
         if git diff --quiet; then
           echo "No submodule updates available"
           exit 0
@@ -39,19 +36,15 @@ jobs:
 
     - name: Commit and push changes
       run: |
-        # Add all submodule changes
         git add .
 
-        # Check if there are staged changes
         if git diff --cached --quiet; then
           echo "No changes to commit"
           exit 0
         fi
 
-        # Commit the changes
         git commit -m "chore: update submodules to latest commits [skip ci]"
         
-        # Push changes to master branch
         git push origin master
 
     - name: Summary
