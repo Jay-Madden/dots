@@ -22,6 +22,22 @@ cd() {
     fi
 }
 
+# Setup PATH
+export PATH="/opt/homebrew/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
+
+# Add dotnet to $PATH
+export PATH="/usr/local/share/dotnet:$PATH"
+
+# Add dotnet tools to path
+export PATH="$PATH:$HOME/.dotnet/tools"
+
+#Add GO to $PATH
+export PATH="$PATH:$HOME/go/bin"
+
+# Add krew to path
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 # Add vscode to PATH
 export PATH="$PATH:/Applications/Visual Studio Code.app/Contents/Resources/app/bin"
@@ -312,21 +328,5 @@ export EDITOR="nvim"
 # Setup wezterm config file
 export WEZTERM_CONFIG_DIR="$HOME/.config/wezterm"
 export WEZTERM_CONFIG_FILE="$HOME/.config/wezterm/wezterm.lua"
-
-export PATH="/opt/homebrew/bin:$PATH"
-export PATH="$HOME/.local/bin:$PATH"
-export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
-
-#Add dotnet to $PATH
-export PATH="/usr/local/share/dotnet:$PATH"
-
-# Add dotnet tools to path
-export PATH="$PATH:$HOME/.dotnet/tools"
-
-#Add GO to $PATH
-export PATH="$PATH:$HOME/go/bin"
-
-# Add krew to path
-export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 
 export GPG_TTY=$(tty)
