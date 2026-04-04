@@ -8,6 +8,9 @@
 !.github/
 !.github/*
 
+!.forgejo/
+!.forgejo/*
+
 !nvim/
 !nvim/*
 

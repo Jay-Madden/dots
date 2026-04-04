@@ -1,0 +1,47 @@
+name: Update Submodules
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-submodules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+        fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "Jay Madden"
+        git config --global user.email "jaymaddencox@gmail.com"
+
+    - name: Update submodules to latest commits
+      run: |
+        git submodule update --remote --merge
+
+        if git diff --quiet; then
+          echo "No submodule updates available"
+          exit 0
+        fi
+
+    - name: Commit and push changes
+      run: |
+        git add .
+
+        if git diff --cached --quiet; then
+          echo "No changes to commit"
+          exit 0
+        fi
+
+        git commit -m "chore: update submodules to latest commits [skip ci]"
+
+        git push origin master
