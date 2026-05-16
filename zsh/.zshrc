@@ -330,3 +330,5 @@ export WEZTERM_CONFIG_DIR="$HOME/.config/wezterm"
 export WEZTERM_CONFIG_FILE="$HOME/.config/wezterm/wezterm.lua"
 
 export GPG_TTY=$(tty)
+
+source $HOME/.zshrc

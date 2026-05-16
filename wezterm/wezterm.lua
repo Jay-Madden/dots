@@ -44,11 +44,21 @@ config.front_end = "WebGpu"
 config.animation_fps = 240
 config.max_fps = 240
 
+config.unix_domains = {
+  {
+    name = "shared",
+  },
+}
+
+-- config.default_domain = "shared"
+-- config.default_mux_server_domain = "shared"
+config.default_gui_startup_args = { "connect", "shared" } --"--workspace", "Home", "shared" }
+
 local mux = wezterm.mux
-wezterm.on("gui-startup", function(cmd)
-  local _, _, window = mux.spawn_window(cmd or {})
-  window:gui_window():maximize()
-end)
+-- wezterm.on("gui-startup", function(cmd)
+--   local _, _, window = mux.spawn_window(cmd or {})
+--   window:gui_window():maximize()
+-- end)
 
 -- Create the "focus window" hot key mappings
 config.keys = {}
@@ -70,10 +80,42 @@ wezterm.on('format-window-title', function(tab, pane, tabs, panes, config)
   end
 end)
 
-config.show_tabs_in_tab_bar = false
-config.show_tab_index_in_tab_bar = false
+config.show_tabs_in_tab_bar = true
+config.show_tab_index_in_tab_bar = true
 config.hide_tab_bar_if_only_one_tab = true
 config.show_new_tab_button_in_tab_bar = false
+
+-- Set your leader key (e.g., Ctrl+b)
+-- config.leader = { key = "b", mods = "CTRL", timeout_milliseconds = 1000 }
+--
+-- -- Example key bindings
+-- config.keys = {
+--   -- Create new tab (tmux window)
+--   { key = "c", mods = "LEADER", action = wezterm.action.SpawnTab("CurrentPaneDomain") },
+--
+--   -- Next/previous tab (tmux next/previous window)
+--   { key = "n", mods = "LEADER", action = wezterm.action.ActivateTabRelative(1) },
+--   { key = "p", mods = "LEADER", action = wezterm.action.ActivateTabRelative(-1) },
+--
+--   -- Horizontal/Vertical splits (tmux % and ")
+--   { key = "%", mods = "LEADER", action = wezterm.action.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+--   { key = '"', mods = "LEADER", action = wezterm.action.SplitVertical({ domain = "CurrentPaneDomain" }) },
+--
+--   -- Navigate panes (tmux h/j/k/l)
+--   { key = "h", mods = "LEADER", action = wezterm.action.ActivatePaneDirection("Left") },
+--   { key = "j", mods = "LEADER", action = wezterm.action.ActivatePaneDirection("Down") },
+--   { key = "k", mods = "LEADER", action = wezterm.action.ActivatePaneDirection("Up") },
+--   { key = "l", mods = "LEADER", action = wezterm.action.ActivatePaneDirection("Right") },
+--
+--   -- Toggle pane zoom state (tmux z)
+--   { key = "z", mods = "LEADER", action = wezterm.action.TogglePaneZoomState },
+--
+--   -- Enter copy mode (tmux [)
+--   { key = "[", mods = "LEADER", action = wezterm.action.ActivateCopyMode },
+--
+--   -- Paste from clipboard (tmux ])
+--   { key = "]", mods = "LEADER", action = wezterm.action.PasteFrom("Clipboard") },
+-- }
 
 -- Returns our config to be evaluated. We must always do this at the bottom of this file
 return config

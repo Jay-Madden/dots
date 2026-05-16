@@ -16,6 +16,7 @@
 
 !zsh/
 !zsh/*
+zsh/.zsh_sessions/
 
 !nushell/
 !nushell/*
@@ -28,6 +29,9 @@
 
 !tmux/
 !tmux/*
+
+!zellij/
+!zellij/*
 
 !k9s/
 !k9s/*
