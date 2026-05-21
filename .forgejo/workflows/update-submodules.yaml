@@ -7,7 +7,7 @@ on:
 
 jobs:
   update-submodules:
-    runs-on: ubuntu-latest
+    runs-on: codeberg-tiny-lazy
     permissions:
       contents: write
 
