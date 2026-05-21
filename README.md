@@ -1,11 +1,11 @@
-# My dotfiles 
+# My dotfiles
 
 
 and other misc configurations
 
 ## Setup
 
-* Clone the repo into a temp dir and then move into the top level folder so as to not conflict with exsting config. 
+* Clone the repo into a temp dir and then move into the top level folder so as to not conflict with exsting config.
     ```bash
     git clone --recursive https://github.com/Jay-Madden/dots temp
     mv temp/.git code/.git
@@ -30,3 +30,4 @@ In order to bootstrap the zsh configuration we have to redirect to the XDG confi
 ## Required components
 
 * zoxide `brew install zoxide`
+* zellij `brew install zellij`
