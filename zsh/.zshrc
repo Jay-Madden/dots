@@ -10,7 +10,7 @@ export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || pr
 
 # Run onefetch when we navigate to a new repo
 LAST_REPO=""
-cd() { 
+cd() {
     builtin cd "$@";
     git rev-parse 2>/dev/null;
 
@@ -172,7 +172,7 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=23'
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-# Unbind execute mode 
+# Unbind execute mode
 bindkey -a -r ':'
 # Immediately show completions
 bindkey '\t' menu-complete
@@ -191,6 +191,43 @@ alias cd='z'
 alias cdi='zi'
 alias lg='lazygit'
 alias cursor='cursor-agent'
+
+# Zellij tab name
+function current_dir() {
+    local current_dir=$PWD
+    if [[ $current_dir == $HOME ]]; then
+        current_dir="~"
+    else
+        current_dir=${current_dir##*/}
+    fi
+    echo $current_dir
+}
+
+function change_tab_title() {
+    local title=$1
+    if [[ -n $ZELLIJ_PANE_ID ]]; then
+        title="$title #$ZELLIJ_PANE_ID"
+    fi
+    command nohup zellij action rename-tab "$title" >/dev/null 2>&1
+}
+
+function set_tab_to_working_dir() {
+    local result=$?
+    local title=$(current_dir)
+    change_tab_title $title
+}
+
+function set_tab_to_command_line() {
+    local cmdline=$1
+    change_tab_title $cmdline
+}
+
+if [[ -n $ZELLIJ ]]; then
+    autoload -U add-zsh-hook
+    add-zsh-hook precmd set_tab_to_working_dir
+    add-zsh-hook preexec set_tab_to_command_line
+fi
+
 
 # neovim aliases
 alias ovim='/usr/bin/vim'
@@ -235,8 +272,8 @@ vim() {
             resumed=1
             break
         fi
-    done 
-    
+    done
+
     # If no matching suspended job was found, start a new nvim
     if [ $resumed -eq 0 ]; then
         echo "All variables: resumed=$resumed, current_dir=$current_dir"

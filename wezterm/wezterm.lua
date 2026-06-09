@@ -44,21 +44,11 @@ config.front_end = "WebGpu"
 config.animation_fps = 240
 config.max_fps = 240
 
-config.unix_domains = {
-  {
-    name = "shared",
-  },
-}
-
--- config.default_domain = "shared"
--- config.default_mux_server_domain = "shared"
-config.default_gui_startup_args = { "connect", "shared" } --"--workspace", "Home", "shared" }
-
 local mux = wezterm.mux
--- wezterm.on("gui-startup", function(cmd)
---   local _, _, window = mux.spawn_window(cmd or {})
---   window:gui_window():maximize()
--- end)
+wezterm.on("gui-startup", function(cmd)
+  local _, _, window = mux.spawn_window(cmd or {})
+  window:gui_window():maximize()
+end)
 
 -- Create the "focus window" hot key mappings
 config.keys = {}
