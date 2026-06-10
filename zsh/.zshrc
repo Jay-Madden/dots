@@ -8,10 +8,10 @@ export ZSH="$HOME/.oh-my-zsh"
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
 
-# Run onefetch when we navigate to a new repo
+# Jump with zoxide and run onefetch when we navigate to a new repo
 LAST_REPO=""
 cd() {
-    builtin cd "$@";
+    __zoxide_z "$@";
     git rev-parse 2>/dev/null;
 
     if [ $? -eq 0 ]; then
@@ -183,11 +183,9 @@ bindkey '\t' menu-complete
 export BAT_THEME="1337"
 alias cat='bat --paging=never'
 
-alias ls='eza'
 alias c='clear'
 alias python='python3'
 alias h='atuin history list'
-alias cd='z'
 alias cdi='zi'
 alias lg='lazygit'
 alias cursor='cursor-agent'
@@ -219,7 +217,11 @@ function set_tab_to_working_dir() {
 
 function set_tab_to_command_line() {
     local cmdline=$1
-    change_tab_title $cmdline
+    local program=${cmdline%% *}
+    if (( ${#program} > 12 )); then
+        program="${program[1,12]}..."
+    fi
+    change_tab_title $program
 }
 
 if [[ -n $ZELLIJ ]]; then
