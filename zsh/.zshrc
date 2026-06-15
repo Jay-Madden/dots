@@ -206,7 +206,7 @@ function change_tab_title() {
     if [[ -n $ZELLIJ_PANE_ID ]]; then
         title="$title #$ZELLIJ_PANE_ID"
     fi
-    command nohup zellij action rename-tab "$title" >/dev/null 2>&1
+    command zellij action rename-tab "$title" >/dev/null 2>&1
 }
 
 function set_tab_to_working_dir() {
