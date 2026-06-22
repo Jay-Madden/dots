@@ -45,6 +45,7 @@ alias code="/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin/co
 
 # zsh-vim configs
 ZVM_VI_INSERT_ESCAPE_BINDKEY=jj
+bindkey -M vicmd "^V" edit-command-line
 
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,

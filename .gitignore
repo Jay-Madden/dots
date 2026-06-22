@@ -30,8 +30,10 @@ zsh/.zsh_sessions/
 !tmux/
 !tmux/*
 
+# Merged specific config
 !opencode/
 !opencode/*
+opencode/opencode.jsonc
 
 !zellij/
 !zellij/*
