@@ -41,57 +41,6 @@
       "git branch *": "allow"
     },
     "webfetch": "allow"
-  },
-  "provider": {
-    "inference.nvidia.com": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "inference.nvidia.com",
-      "options": {
-        "baseURL": "https://inference-api.nvidia.com/v1",
-        "apiKey": "{env:INFERENCE_HUB_API_KEY}"
-      },
-      "models": {
-        "aws/anthropic/claude-opus-4-5": {
-          "name": "claude opus 4.5",
-          "limit": {
-            "context": 200000,
-            "output": 65536
-          }
-        },
-        "aws/anthropic/bedrock-claude-opus-4-6": {
-          "name": "claude opus 4.6",
-          "limit": {
-            "context": 200000,
-            "output": 65536
-          }
-        },
-        "aws/anthropic/bedrock-claude-opus-4-7": {
-          "name": "claude opus 4.7"
-          // "limit": {
-          //   "context": 200000,
-          //   "output": 65536
-          // }
-        },
-        "aws/anthropic/bedrock-claude-opus-4-8": {
-          "name": "claude opus 4.8",
-          "options": {
-            "thinking": {
-              "type": "adaptive"
-            },
-            "output_config": {
-              "effort": "medium"
-            }
-          }
-        },
-        "nvidia/nvidia/nemotron-3-super-v3": {
-          "name": "nemotron 3 super v3",
-          "limit": {
-            "context": 200000,
-            "output": 4096
-          }
-        }
-      }
-    }
   }
 }
 
