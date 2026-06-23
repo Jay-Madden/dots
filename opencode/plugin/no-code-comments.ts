@@ -12,6 +12,9 @@ const commentPatterns: Record<string, RegExp> = {
   ".zig": /\/\//,
 }
 
+const blockedText = /\u2014/
+const blockedTextMessage = "Reword without em dash characters."
+
 type Write = { path?: string; text: string }
 
 const toolWrites: Record<string, (args: unknown) => Write[]> = {
@@ -21,8 +24,13 @@ const toolWrites: Record<string, (args: unknown) => Write[]> = {
 }
 
 export default (async () => ({
+  "experimental.text.complete": async (_, output) => {
+    rejectBlockedText(output.text)
+  },
   "tool.execute.before": async (input, output) => {
     for (const write of writesForTool(input.tool, output.args)) {
+      rejectBlockedText(write.text, input.tool)
+
       const pattern = patternForPath(write.path)
 
       if (pattern?.test(write.text)) {
@@ -31,6 +39,12 @@ export default (async () => ({
     }
   },
 })) satisfies Plugin
+
+function rejectBlockedText(value: string, source = "model output") {
+  if (blockedText.test(value)) {
+    throw new Error(`Blocked ${source}: ${blockedTextMessage}`)
+  }
+}
 
 function writesForTool(tool: string, args: unknown): Array<{ path?: string; text: string }> {
   return toolWrites[tool]?.(args) ?? []

@@ -9,6 +9,8 @@
     "edit": "ask",
     "write": "ask",
     "patch": "ask",
+    "glob": "allow",
+    "grep": "allow",
     "bash": {
       "*": "ask",
       "ls": "allow",
@@ -43,4 +45,3 @@
     "webfetch": "allow"
   }
 }
-
