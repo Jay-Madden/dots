@@ -16,7 +16,7 @@ cd() {
 
     if [ $? -eq 0 ]; then
         if [ "$LAST_REPO" != $(basename $(git rev-parse --show-toplevel)) ]; then
-        onefetch
+        gtimeout 1 onefetch --disabled-fields authors contributors commits churn
         LAST_REPO=$(basename $(git rev-parse --show-toplevel))
         fi
     fi
