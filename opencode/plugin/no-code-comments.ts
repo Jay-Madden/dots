@@ -1,15 +1,15 @@
 import type { Plugin } from "@opencode-ai/plugin"
 
 const commentPatterns: Record<string, RegExp> = {
-  ".go": /\/\/|\/\*/,
-  ".js": /\/\/|\/\*/,
-  ".jsx": /\/\/|\/\*/,
-  ".mjs": /\/\/|\/\*/,
-  ".py": /#/,
-  ".rs": /\/\/|\/\*/,
-  ".ts": /\/\/|\/\*/,
-  ".tsx": /\/\/|\/\*/,
-  ".zig": /\/\//,
+  ".go": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".js": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".jsx": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".mjs": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".py": /^\s*#/,
+  ".rs": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".ts": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".tsx": /^\s*(?:\x2f\x2f|\x2f\*)/,
+  ".zig": /^\s*\x2f\x2f/,
 }
 
 const blockedText = /\u2014/
