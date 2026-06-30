@@ -34,7 +34,7 @@ export default (async () => ({
       const pattern = patternForPath(write.path)
 
       if (pattern?.test(write.text)) {
-        throw new Error(`Blocked ${input.tool}: comments are not allowed in ${write.path ?? "code"}`)
+        throw new Error(`Blocked ${input.tool}: comments are not allowed in ${write.path ?? "code"} please reattempt the patch without comments`)
       }
     }
   },
