@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import { resolve } from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
 
 const commentPatterns: Record<string, RegExp> = {
@@ -33,8 +35,8 @@ export default (async () => ({
 
       const pattern = patternForPath(write.path)
 
-      if (pattern?.test(write.text)) {
-        throw new Error(`Blocked ${input.tool}: comments are not allowed in ${write.path ?? "code"} please reattempt the patch without comments`)
+      if (pattern && await hasNewComment(write, pattern)) {
+        throw new Error(`Blocked ${input.tool}: new comments are not allowed in ${write.path ?? "code"} please reattempt the patch without comments`)
       }
     }
   },
@@ -48,6 +50,30 @@ function rejectBlockedText(value: string, source = "model output") {
 
 function writesForTool(tool: string, args: unknown): Array<{ path?: string; text: string }> {
   return toolWrites[tool]?.(args) ?? []
+}
+
+async function hasNewComment(write: Write, pattern: RegExp): Promise<boolean> {
+  const previousLines = await linesForExistingFile(write.path)
+
+  for (const line of write.text.split(/\r?\n/)) {
+    if (pattern.test(line) && !previousLines.has(line)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function linesForExistingFile(path?: string): Promise<Set<string>> {
+  if (!path) {
+    return new Set()
+  }
+
+  try {
+    return new Set((await readFile(resolve(path), "utf8")).split(/\r?\n/))
+  } catch {
+    return new Set()
+  }
 }
 
 function writeFromArgs(args: unknown, pathKey: string, textKey: string): Write[] {

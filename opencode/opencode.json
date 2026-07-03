@@ -40,7 +40,8 @@
       "git show": "allow",
       "git show *": "allow",
       "git branch": "allow",
-      "git branch *": "allow"
+      "git branch *": "allow",
+      "glean-cli *": "allow"
     },
     "webfetch": "allow"
   }
