@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.80.6",
+  "lastChangelogVersion": "0.80.7",
   "defaultThinkingLevel": "medium",
   "outputPad": 1,
   "editorPaddingX": 1,
@@ -9,5 +9,7 @@
   "showCacheMissNotices": true,
   "enableInstallTelemetry": true,
   "collapseChangelog": true,
-  "quietStartup": true
+  "quietStartup": true,
+  "defaultProvider": "inference.nvidia.com",
+  "defaultModel": "azure/openai/gpt-5.6-sol"
 }

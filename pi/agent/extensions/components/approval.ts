@@ -16,7 +16,7 @@ export async function approval(
     return approved ? { approved: true } : { approved: false, reason: defaultReason };
   }
 
-  return ctx.ui.custom<Approval>((tui, theme, _keybindings, done) => {
+  return ctx.ui.custom<Approval>((tui, theme, keybindings, done) => {
     let selected: "yes" | "no" = "yes";
     let feedbackMode = false;
     const input = new Input();
@@ -34,6 +34,12 @@ export async function approval(
 
     return {
       handleInput(data: string) {
+        if (keybindings.matches(data, "app.tools.expand")) {
+          ctx.ui.setToolsExpanded(!ctx.ui.getToolsExpanded());
+          tui.requestRender();
+          return;
+        }
+
         if (feedbackMode) {
           if (matchesKey(data, Key.up)) {
             feedbackMode = false;
