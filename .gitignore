@@ -33,7 +33,9 @@ zsh/.zsh_sessions/
 # Merged specific config
 !opencode/
 !opencode/*
-opencode/opencode.jsonc
+
+!pi/
+!pi/*
 
 !zellij/
 !zellij/*

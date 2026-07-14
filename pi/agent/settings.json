@@ -1,0 +1,13 @@
+{
+  "lastChangelogVersion": "0.80.6",
+  "defaultThinkingLevel": "medium",
+  "outputPad": 1,
+  "editorPaddingX": 1,
+  "theme": "kanagawa-wave",
+  "steeringMode": "all",
+  "followUpMode": "all",
+  "showCacheMissNotices": true,
+  "enableInstallTelemetry": true,
+  "collapseChangelog": true,
+  "quietStartup": true
+}
