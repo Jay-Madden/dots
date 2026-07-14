@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises"
+import { appendFile, readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
+import { parsePatch } from "diff"
 
 const commentPatterns: Record<string, RegExp> = {
   ".go": /^\s*(?:\x2f\x2f|\x2f\*)/,
@@ -18,26 +19,27 @@ const blockedText = /\u2014/
 const blockedTextMessage = "Reword without em dash characters."
 
 type Write = { path?: string; text: string }
-
-const toolWrites: Record<string, (args: unknown) => Write[]> = {
-  edit: (args) => writeFromArgs(args, "filePath", "newString"),
-  write: (args) => writeFromArgs(args, "filePath", "content"),
-  apply_patch: patchWrites,
-}
+type EditArgs = { filePath: string; oldString: string, newString: string }
+type WriteArgs = { filePath: string; content: string }
+type PatchArgs = { patchText: string }
 
 export default (async () => ({
   "experimental.text.complete": async (_, output) => {
+    return;
     rejectBlockedText(output.text)
   },
   "tool.execute.before": async (input, output) => {
-    for (const write of writesForTool(input.tool, output.args)) {
-      rejectBlockedText(write.text, input.tool)
-
-      const pattern = patternForPath(write.path)
-
-      if (pattern && await hasNewComment(write, pattern)) {
-        throw new Error(`Blocked ${input.tool}: new comments are not allowed in ${write.path ?? "code"} please reattempt the patch without comments`)
-      }
+    return;
+    switch (input.tool) {
+      case "edit":
+        await rejectEdit(output.args)
+        break
+      case "write":
+        await rejectWrite(output.args)
+        break
+      case "apply_patch":
+        await rejectPatch(output.args)
+        break
     }
   },
 })) satisfies Plugin
@@ -46,10 +48,6 @@ function rejectBlockedText(value: string, source = "model output") {
   if (blockedText.test(value)) {
     throw new Error(`Blocked ${source}: ${blockedTextMessage}`)
   }
-}
-
-function writesForTool(tool: string, args: unknown): Array<{ path?: string; text: string }> {
-  return toolWrites[tool]?.(args) ?? []
 }
 
 async function hasNewComment(write: Write, pattern: RegExp): Promise<boolean> {
@@ -76,50 +74,92 @@ async function linesForExistingFile(path?: string): Promise<Set<string>> {
   }
 }
 
-function writeFromArgs(args: unknown, pathKey: string, textKey: string): Write[] {
-  if (!args || typeof args !== "object") {
-    return []
+async function rejectEdit(args: EditArgs) {
+
+  const oldCmt = commentPatterns['js'].exec(args.oldString)
+  const newCmt = commentPatterns['js'].exec(args.newString)
+
+  if (!newCmt) {
+    return
   }
 
-  const record = args as Record<string, unknown>
-  const path = record[pathKey]
-  const text = record[textKey]
-
-  if (typeof text !== "string") {
-    return []
+  for (var cmt of newCmt) {
+    if (oldCmt && oldCmt.includes(cmt)) {
+      continue
+    }
+    throw new Error(`Blocked edit: new comments are not allowed in ${args.filePath} please reattempt the edit without comments`)
   }
-
-  return [{ path: typeof path === "string" ? path : undefined, text }]
 }
 
-function patchWrites(args: unknown): Array<{ path?: string; text: string }> {
+async function rejectWrite(args: WriteArgs) {
   if (!args || typeof args !== "object") {
-    return []
+    return
   }
 
-  const patchText = (args as Record<string, unknown>).patchText
+  const path = args.filePath
+  const text = args.content
+
+  if (typeof text !== "string") {
+    return
+  }
+
+  const write = { path: typeof path === "string" ? path : undefined, text }
+
+  rejectBlockedText(write.text, "write")
+
+  const pattern = patternForPath(write.path)
+
+  if (pattern && await hasNewComment(write, pattern)) {
+    throw new Error(`Blocked write: new comments are not allowed in ${write.path ?? "code"} please reattempt the write without comments`)
+  }
+}
+
+async function rejectPatch(args: PatchArgs) {
+  if (!args || typeof args !== "object") {
+    return
+  }
+
+  const patchText = args.patchText
 
   if (typeof patchText !== "string") {
-    return []
+    return
   }
 
-  const writes: Array<{ path?: string; text: string }> = []
-  let path: string | undefined
+  for (const patch of parsePatch(patchText)) {
+    const path = patch.newFileName?.replace(/^b\//, "")
+    const pattern = patternForPath(path)
 
-  for (const line of patchText.split(/\r?\n/)) {
-    const file = line.match(/^\*\*\* (?:Add|Update) File: (.+)$/)
-
-    if (file) {
-      path = file[1]
+    if (!pattern) {
       continue
     }
 
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      writes.push({ path, text: line.slice(1) })
+    for (const hunk of patch.hunks) {
+      const oldText = hunk.lines
+        .filter((line) => !line.startsWith("+"))
+        .map((line) => line.slice(1))
+        .join("\n")
+      const newText = hunk.lines
+        .filter((line) => !line.startsWith("-"))
+        .map((line) => line.slice(1))
+        .join("\n")
+      const oldCmt = pattern.exec(oldText)
+      const newCmt = pattern.exec(newText)
+
+      if (!newCmt) {
+        continue
+      }
+
+      rejectBlockedText(newText, "apply_patch")
+
+      for (const cmt of newCmt) {
+        if (oldCmt && oldCmt.includes(cmt)) {
+          continue
+        }
+
+        throw new Error(`Blocked apply_patch: new comments are not allowed in ${path ?? "code"} please reattempt the patch without comments`)
+      }
     }
   }
-
-  return writes
 }
 
 function patternForPath(path?: string): RegExp | undefined {

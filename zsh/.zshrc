@@ -43,6 +43,10 @@ export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
 export PATH="$PATH:/Applications/Visual Studio Code.app/Contents/Resources/app/bin"
 alias code="/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin/code"
 
+# Set pi config dir
+export PI_CONFIG_DIR="$HOME/.config/pi"
+export PI_CODING_AGENT_DIR="$HOME/.config/pi/agent"
+
 # zsh-vim configs
 ZVM_VI_INSERT_ESCAPE_BINDKEY=jj
 bindkey -M vicmd "^V" edit-command-line
