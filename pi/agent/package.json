@@ -17,6 +17,8 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-bash": "^0.25.1",
     "vscode-jsonrpc": "^9.0.1",
     "vscode-languageserver-protocol": "^3.18.2"
   }
