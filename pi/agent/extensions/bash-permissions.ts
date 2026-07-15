@@ -2,8 +2,8 @@ import { createRequire } from "node:module";
 import {
   highlightCode,
   type ExtensionAPI,
-  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { approval } from "./components/approval.ts";
 import { Language, Parser, Query, type Node } from "web-tree-sitter";
 
 const require = createRequire(import.meta.url);
@@ -108,7 +108,7 @@ export default function (pi: ExtensionAPI) {
     if (blocked.length === 0) {
       return undefined;
     }
-    return requestApproval(
+    const result = await approval(
       ctx,
       ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Approve bash command?")),
       [
@@ -117,7 +117,11 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.theme.fg("accent", "Requires approval:"),
         ...blocked.flatMap((item) => highlightCode(item, "bash")),
       ].join("\n"),
+      "Bash command was denied by the user",
     );
+    return result.approved
+      ? undefined
+      : { block: true, reason: result.reason };
   });
 }
 
@@ -195,20 +199,3 @@ function matchesAllowedCommand(
   return next !== undefined && matchesAllowedCommand(next, remaining, match.allowedCommands);
 }
 
-async function requestApproval(
-  ctx: ExtensionContext,
-  title: string,
-  message: string,
-) {
-  if (!ctx.hasUI) {
-    return {
-      block: true,
-      reason: `${title} Approval is unavailable without an interactive UI: ${message}`,
-    };
-  }
-
-  const approved = await ctx.ui.confirm(title, message);
-  return approved
-    ? undefined
-    : { block: true, reason: "Operation was denied by the user" };
-}
