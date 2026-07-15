@@ -108,15 +108,18 @@ export default function (pi: ExtensionAPI) {
     if (blocked.length === 0) {
       return undefined;
     }
+    const message = blocked.length === 1
+      ? highlightCode(command, "bash").join("\n")
+      : [
+          ...highlightCode(command, "bash"),
+          "",
+          ctx.ui.theme.fg("accent", "Requires approval:"),
+          ...blocked.flatMap((item) => highlightCode(item, "bash")),
+        ].join("\n");
     const result = await approval(
       ctx,
       ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Approve bash command?")),
-      [
-        ...highlightCode(command, "bash"),
-        "",
-        ctx.ui.theme.fg("accent", "Requires approval:"),
-        ...blocked.flatMap((item) => highlightCode(item, "bash")),
-      ].join("\n"),
+      message,
       "Bash command was denied by the user",
     );
     return result.approved
