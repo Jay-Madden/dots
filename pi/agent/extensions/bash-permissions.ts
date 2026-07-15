@@ -189,6 +189,7 @@ function matchesAllowedCommand(
   if (
     match.blockedCommands &&
     arguments_.some((argument) =>
+      // some commands can do --out=foo.txt which we detect here
       match.blockedCommands?.has(argument.split("=", 1)[0] ?? ""),
     )
   ) {
