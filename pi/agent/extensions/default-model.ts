@@ -10,7 +10,10 @@ export default function (pi: ExtensionAPI) {
 
     const model = ctx.modelRegistry.find(provider, modelId);
     if (!model) {
-      ctx.ui.notify(`Default model not found: ${provider}/${modelId}`, "warning");
+      ctx.ui.notify(
+        `Default model not found: ${provider}/${modelId}`,
+        "warning",
+      );
       return;
     }
 

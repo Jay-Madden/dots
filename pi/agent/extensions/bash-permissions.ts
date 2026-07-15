@@ -1,4 +1,7 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 const commandPrefixes = [
   "ls",
@@ -40,7 +43,9 @@ export default function (pi: ExtensionAPI) {
 }
 
 function isAllowed(command: string): boolean {
-  return commandPrefixes.some((prefix) => command === prefix || command.startsWith(`${prefix} `));
+  return commandPrefixes.some(
+    (prefix) => command === prefix || command.startsWith(`${prefix} `),
+  );
 }
 
 async function requestApproval(
@@ -56,5 +61,7 @@ async function requestApproval(
   }
 
   const approved = await ctx.ui.confirm(title, message);
-  return approved ? undefined : { block: true, reason: "Operation was denied by the user" };
+  return approved
+    ? undefined
+    : { block: true, reason: "Operation was denied by the user" };
 }

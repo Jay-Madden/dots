@@ -1,9 +1,13 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Input, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import {
+  Input,
+  Key,
+  matchesKey,
+  truncateToWidth,
+  wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 
-export type Approval =
-  | { approved: true }
-  | { approved: false; reason: string };
+export type Approval = { approved: true } | { approved: false; reason: string };
 
 export async function approval(
   ctx: ExtensionContext,
@@ -13,7 +17,9 @@ export async function approval(
 ): Promise<Approval> {
   if (ctx.mode !== "tui") {
     const approved = await ctx.ui.confirm(title, message);
-    return approved ? { approved: true } : { approved: false, reason: defaultReason };
+    return approved
+      ? { approved: true }
+      : { approved: false, reason: defaultReason };
   }
 
   return ctx.ui.custom<Approval>((tui, theme, keybindings, done) => {
@@ -59,9 +65,11 @@ export async function approval(
         } else if (matchesKey(data, Key.tab) && selected === "no") {
           feedbackMode = true;
         } else if (matchesKey(data, Key.enter)) {
-          done(selected === "yes"
-            ? { approved: true }
-            : { approved: false, reason: defaultReason });
+          done(
+            selected === "yes"
+              ? { approved: true }
+              : { approved: false, reason: defaultReason },
+          );
           return;
         } else if (matchesKey(data, Key.escape)) {
           done({ approved: false, reason: defaultReason });
@@ -74,28 +82,44 @@ export async function approval(
         const lines = [theme.fg("border", "─".repeat(width)), ""];
         lines.push(theme.fg("accent", theme.bold(` ${title}`)));
         for (const sourceLine of message.split("\n")) {
-          lines.push(...wrapTextWithAnsi(theme.fg("accent", theme.bold(` ${sourceLine}`)), innerWidth));
+          lines.push(
+            ...wrapTextWithAnsi(
+              theme.fg("accent", theme.bold(` ${sourceLine}`)),
+              innerWidth,
+            ),
+          );
         }
         lines.push("");
 
         const padding = "   ";
         // this emote →
         const selectedPrefix = " \u2192 ";
-        lines.push(selected === "yes" ? theme.fg("accent", `${selectedPrefix}Yes`) : `${padding}Yes`);
-        lines.push(selected === "no" ? theme.fg("accent", `${selectedPrefix}No`) : `${padding}No`);
+        lines.push(
+          selected === "yes"
+            ? theme.fg("accent", `${selectedPrefix}Yes`)
+            : `${padding}Yes`,
+        );
+        lines.push(
+          selected === "no"
+            ? theme.fg("accent", `${selectedPrefix}No`)
+            : `${padding}No`,
+        );
 
         if (feedbackMode) {
           const inputLines = input.render(Math.max(1, innerWidth - 5));
           const feedback = input.getValue()
             ? (inputLines[0] ?? "").slice(2)
             : "What should I do differently?";
-          lines[lines.length - 1] = `${lines[lines.length - 1]} ${theme.fg("dim", feedback)}`;
+          lines[lines.length - 1] =
+            `${lines[lines.length - 1]} ${theme.fg("dim", feedback)}`;
         }
 
         lines.push("");
-        lines.push(feedbackMode
-          ? theme.fg("dim", " Enter reject with message  escape back")
-          : ` ${theme.fg("dim", "\u2191\u2193")} ${theme.fg("muted", "navigate")}  ${theme.fg("dim", "enter")} ${theme.fg("muted", "select")} ${theme.fg("dim", "escape/ctrl+c")} ${theme.fg("muted", "cancel")}`);
+        lines.push(
+          feedbackMode
+            ? theme.fg("dim", " Enter reject with message  escape back")
+            : ` ${theme.fg("dim", "\u2191\u2193")} ${theme.fg("muted", "navigate")}  ${theme.fg("dim", "enter")} ${theme.fg("muted", "select")} ${theme.fg("dim", "escape/ctrl+c")} ${theme.fg("muted", "cancel")}`,
+        );
         lines.push("");
         lines.push(theme.fg("border", "─".repeat(width)));
 

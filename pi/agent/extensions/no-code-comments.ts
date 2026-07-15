@@ -39,9 +39,12 @@ export default function (pi: ExtensionAPI) {
     }
 
     const input = event.input as ToolInput;
-    const path = typeof input.path === "string" ? input.path.replace(/^@/, "") : "";
+    const path =
+      typeof input.path === "string" ? input.path.replace(/^@/, "") : "";
     const changes = editsFor(event.toolName, input);
-    const emDashLines = changes.flatMap(({ newText }) => linesContaining(newText, emDash));
+    const emDashLines = changes.flatMap(({ newText }) =>
+      linesContaining(newText, emDash),
+    );
 
     if (emDashLines.length > 0) {
       return { block: true, reason: "Edit contains an em dash" };
@@ -49,15 +52,21 @@ export default function (pi: ExtensionAPI) {
 
     const markers = commentMarkersByExtension[extname(path).toLowerCase()];
     if (markers) {
-      const existingLines = event.toolName === "write"
-        ? await readExistingLines(path, ctx.cwd)
-        : new Set<string>();
+      const existingLines =
+        event.toolName === "write"
+          ? await readExistingLines(path, ctx.cwd)
+          : new Set<string>();
       const addedComments = changes.flatMap(({ oldText, newText }) => {
-        const priorLines = event.toolName === "write"
-          ? existingLines
-          : new Set(oldText.split(/\r?\n/));
-        const priorComments = new Set([...priorLines].filter((line) => isCommentLine(line, markers)));
-        const nextComments = new Set(newText.split(/\r?\n/).filter((line) => isCommentLine(line, markers)));
+        const priorLines =
+          event.toolName === "write"
+            ? existingLines
+            : new Set(oldText.split(/\r?\n/));
+        const priorComments = new Set(
+          [...priorLines].filter((line) => isCommentLine(line, markers)),
+        );
+        const nextComments = new Set(
+          newText.split(/\r?\n/).filter((line) => isCommentLine(line, markers)),
+        );
         if (nextComments.size > priorComments.size) {
           return [...nextComments];
         }
@@ -66,10 +75,17 @@ export default function (pi: ExtensionAPI) {
 
       if (addedComments.length > 0) {
         if (!ctx.hasUI) {
-          return { block: true, reason: "Comments were denied, please resubmit the patch without comments" };
+          return {
+            block: true,
+            reason:
+              "Comments were denied, please resubmit the patch without comments",
+          };
         }
 
-        const preview = addedComments.slice(0, 5).map((line) => `  ${line}`).join("\n");
+        const preview = addedComments
+          .slice(0, 5)
+          .map((line) => `  ${line}`)
+          .join("\n");
         const approve = await approval(
           ctx,
           "Approve code comments?",
@@ -94,11 +110,12 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.theme.fg("muted", path || "unknown path"),
         `${event.toolName} was denied by the user`,
       );
-      return approve.approved ? undefined : { block: true, reason: approve.reason };
+      return approve.approved
+        ? undefined
+        : { block: true, reason: approve.reason };
     }
   });
 }
-
 
 function editsFor(toolName: string, input: ToolInput): Edit[] {
   return toolName === "write"
@@ -118,7 +135,10 @@ function linesContaining(text: string, value: string): string[] {
   return text.split(/\r?\n/).filter((line) => line.includes(value));
 }
 
-async function readExistingLines(path: string, cwd: string): Promise<Set<string>> {
+async function readExistingLines(
+  path: string,
+  cwd: string,
+): Promise<Set<string>> {
   if (!path) {
     return new Set();
   }
@@ -130,4 +150,3 @@ async function readExistingLines(path: string, cwd: string): Promise<Set<string>
     return new Set();
   }
 }
-
