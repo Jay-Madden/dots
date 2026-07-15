@@ -43,6 +43,7 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "wc" },
   { name: "stat" },
   { name: "file" },
+  { name: "sort" },
   { name: "pwd" },
   { name: "which" },
   { name: "echo" },
