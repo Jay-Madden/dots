@@ -12,7 +12,14 @@ import type {
 } from "vscode-languageserver-protocol";
 
 export type LspLanguage =
-  "javascript" | "typescript" | "python" | "go" | "yaml" | "rust" | "lua";
+  | "javascript"
+  | "typescript"
+  | "python"
+  | "go"
+  | "yaml"
+  | "rust"
+  | "lua"
+  | "bash";
 
 export const languageByExtension: Record<string, LspLanguage> = {
   ".js": "javascript",
@@ -30,6 +37,9 @@ export const languageByExtension: Record<string, LspLanguage> = {
   ".yml": "yaml",
   ".rs": "rust",
   ".lua": "lua",
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
 };
 
 type LspCommand = {
@@ -62,6 +72,11 @@ const commands: Record<LspLanguage, LspCommand> = {
     name: "lua-language-server",
     command: "lua-language-server",
     args: [],
+  },
+  bash: {
+    name: "bashls",
+    command: "bash-language-server",
+    args: ["start"],
   },
 };
 
