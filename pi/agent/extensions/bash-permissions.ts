@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
+import {
+  highlightCode,
+  type ExtensionAPI,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Language, Parser, Query, type Node } from "web-tree-sitter";
 
@@ -98,32 +99,47 @@ export default function (pi: ExtensionAPI) {
     }
 
     const command = (event.input as { command?: unknown }).command;
-    if (typeof command !== "string" || isAllowed(command)) {
+    if (typeof command !== "string") {
       return undefined;
     }
-    return requestApproval(ctx, "Approve bash command?", command);
+
+    const blocked = blockedCommands(command);
+    if (blocked.length === 0) {
+      return undefined;
+    }
+    return requestApproval(
+      ctx,
+      ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Approve bash command?")),
+      [
+        ...highlightCode(command, "bash"),
+        "",
+        ctx.ui.theme.fg("accent", "Requires approval:"),
+        ...blocked.flatMap((item) => highlightCode(item, "bash")),
+      ].join("\n"),
+    );
   });
 }
 
-function isAllowed(command: string): boolean {
-  const tree = parser.parse(command);
+function blockedCommands(source: string): string[] {
+  const tree = parser.parse(source);
   if (!tree || tree.rootNode.hasError) {
-    return false;
+    return [source];
   }
 
-  const redirects = redirectsQuery
+  const blocked = redirectsQuery
     .captures(tree.rootNode)
-    .map((capture) => capture.node);
+    .map((capture) => capture.node)
+    .filter(isFileWritingRedirect)
+    .map((redirect) => redirect.text);
 
-  if (redirects.some(isFileWritingRedirect)) {
-    return false;
-  }
-
-  const commands = commandsQuery
-    .captures(tree.rootNode)
-    .map((capture) => capture.node);
-
-  return commands.length > 0 && commands.every(isCommandAllowed);
+  blocked.push(
+    ...commandsQuery
+      .captures(tree.rootNode)
+      .map((capture) => capture.node)
+      .filter((command) => !isCommandAllowed(command))
+      .map((command) => command.text),
+  );
+  return [...new Set(blocked)];
 }
 
 function isCommandAllowed(command: Node): boolean {

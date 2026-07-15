@@ -88,8 +88,8 @@ export default function (pi: ExtensionAPI) {
           .join("\n");
         const approve = await approval(
           ctx,
-          "Approve code comments?",
-          `${ctx.ui.theme.fg("muted", path || "code")}\n\n${preview}`,
+          ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Approve code comments?")),
+          `${ctx.ui.theme.fg("muted", path || "code")}\n\n${ctx.ui.theme.fg("warning", preview)}`,
           "Comments were denied, please resubmit the patch without comments",
         );
         if (!approve.approved) {
@@ -98,22 +98,7 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
-    if (!ctx.hasUI) {
-      return {
-        block: true,
-        reason: `${event.toolName} requires approval, but no interactive UI is available: ${path || "unknown path"}`,
-      };
-    } else {
-      const approve = await approval(
-        ctx,
-        `Approve ${event.toolName}?`,
-        ctx.ui.theme.fg("muted", path || "unknown path"),
-        `${event.toolName} was denied by the user`,
-      );
-      return approve.approved
-        ? undefined
-        : { block: true, reason: approve.reason };
-    }
+    return undefined;
   });
 }
 

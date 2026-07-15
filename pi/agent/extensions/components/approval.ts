@@ -80,14 +80,9 @@ export async function approval(
       render(width: number) {
         const innerWidth = Math.max(1, width - 2);
         const lines = [theme.fg("border", "─".repeat(width)), ""];
-        lines.push(theme.fg("accent", theme.bold(` ${title}`)));
+        lines.push(` ${title}`);
         for (const sourceLine of message.split("\n")) {
-          lines.push(
-            ...wrapTextWithAnsi(
-              theme.fg("accent", theme.bold(` ${sourceLine}`)),
-              innerWidth,
-            ),
-          );
+          lines.push(...wrapTextWithAnsi(` ${sourceLine}`, innerWidth));
         }
         lines.push("");
 
