@@ -47,6 +47,7 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "pwd" },
   { name: "which" },
   { name: "echo" },
+  { name: "continue" },
   { name: "diff" },
   { name: "glean-cli" },
   {
@@ -108,7 +109,7 @@ export default function (pi: ExtensionAPI) {
     if (blocked.length === 0) {
       return undefined;
     }
-    const message = blocked.length === 1
+    const message = blocked.length === 1 && blocked[0] === command
       ? highlightCode(command, "bash").join("\n")
       : [
           ...highlightCode(command, "bash"),

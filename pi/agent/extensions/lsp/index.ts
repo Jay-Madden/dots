@@ -14,7 +14,12 @@ import type {
   PublishDiagnosticsParams,
 } from "vscode-languageserver-protocol";
 import { DiagnosticSeverity } from "vscode-languageserver-protocol";
-import { languageByExtension, LspClient, type LspLanguage } from "./client.ts";
+import {
+  commands,
+  languageByExtension,
+  LspClient,
+  type LspLanguage,
+} from "./client.ts";
 
 type DiagnosticDetails = {
   serverName: string;
@@ -52,17 +57,26 @@ export default function (pi: ExtensionAPI) {
     }
 
     cwd = workspace;
-    const active = await LspClient.start({
-      language,
-      cwd: workspace,
-      onDiagnostics: publishDiagnostics,
-    });
-    clients.push(active);
-    ctx.ui.setStatus(
-      active.name,
-      ctx.ui.theme.fg("dim", `${active.name}:active`),
-    );
-    return active;
+    const serverName = commands[language].name;
+    try {
+      const active = await LspClient.start({
+        language,
+        cwd: workspace,
+        onDiagnostics: publishDiagnostics,
+      });
+      clients.push(active);
+      ctx.ui.setStatus(
+        active.name,
+        ctx.ui.theme.fg("dim", `${active.name}:active`),
+      );
+      return active;
+    } catch (error) {
+      ctx.ui.setStatus(
+        serverName,
+        ctx.ui.theme.fg("error", `${serverName}:failed`),
+      );
+      throw error;
+    }
   };
 
   pi.on("tool_result", async (event, ctx) => {

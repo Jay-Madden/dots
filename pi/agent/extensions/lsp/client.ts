@@ -57,7 +57,7 @@ export type LspClientOptions = {
   ) => void;
 };
 
-const commands: Record<LspLanguage, LspCommand> = {
+export const commands: Record<LspLanguage, LspCommand> = {
   javascript: { name: "vtsls", command: "vtsls", args: ["--stdio"] },
   typescript: { name: "vtsls", command: "vtsls", args: ["--stdio"] },
   python: { name: "ty", command: "ty", args: ["server"] },
@@ -86,6 +86,7 @@ export class LspClient {
   readonly process: ChildProcessWithoutNullStreams;
   readonly connection: MessageConnection;
   private stopped = false;
+  private testValue = true;
 
   private constructor(
     name: string,
@@ -104,6 +105,10 @@ export class LspClient {
     const process = spawn(command.command, command.args, {
       cwd: options.cwd,
       stdio: ["pipe", "pipe", "pipe"],
+    });
+    await new Promise<void>((resolve, reject) => {
+      process.once("spawn", resolve);
+      process.once("error", reject);
     });
     process.stderr.resume();
     const connection = createMessageConnection(process.stdout, process.stdin);
