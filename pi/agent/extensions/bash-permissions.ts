@@ -47,7 +47,19 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "pwd" },
   { name: "which" },
   { name: "echo" },
+  // ==========
+  // Shell control primitives that do not mutate external state.
+  { name: "true" },
+  { name: "false" },
+  { name: ":" },
+  { name: "break" },
   { name: "continue" },
+  { name: "return" },
+  { name: "shift" },
+  { name: "test" },
+  { name: "[" },
+  { name: "[[" },
+  // ==========
   { name: "diff" },
   { name: "glean-cli" },
   {
