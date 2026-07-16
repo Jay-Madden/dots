@@ -45,6 +45,8 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "file" },
   { name: "sort" },
   { name: "pwd" },
+  { name: "basename" },
+  { name: "dirname" },
   { name: "which" },
   { name: "echo" },
   // ==========
