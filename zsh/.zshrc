@@ -203,6 +203,9 @@ function current_dir() {
     else
         current_dir=${current_dir##*/}
     fi
+    if (( ${#current_dir} > 15 )); then
+        current_dir="${current_dir[1,12]}..."
+    fi
     echo $current_dir
 }
 
