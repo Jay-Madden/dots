@@ -210,26 +210,34 @@ function current_dir() {
 }
 
 function change_tab_title() {
-    local title=$1
-    if [[ -n $ZELLIJ_PANE_ID ]]; then
-        title="$title #$ZELLIJ_PANE_ID"
+    local process=${1:t}
+    local directory=$(current_dir)
+    local title=$directory
+
+    if [[ -n $process ]]; then
+        local process_max=$((20 - ${#directory} - 1))
+        if (( ${#process} > process_max )); then
+            if (( process_max > 3 )); then
+                process="${process[1,$((process_max - 3))]}..."
+            else
+                process=${process[1,$process_max]}
+            fi
+        fi
+        title="$process:$directory"
     fi
+
     command zellij action rename-tab "$title" >/dev/null 2>&1
 }
 
 function set_tab_to_working_dir() {
     local result=$?
-    local title=$(current_dir)
-    change_tab_title $title
+    change_tab_title
 }
 
 function set_tab_to_command_line() {
     local cmdline=$1
     local program=${cmdline%% *}
-    if (( ${#program} > 12 )); then
-        program="${program[1,12]}..."
-    fi
-    change_tab_title $program
+    change_tab_title "$program"
 }
 
 if [[ -n $ZELLIJ ]]; then
