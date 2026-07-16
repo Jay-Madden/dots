@@ -175,6 +175,12 @@ function isCommandAllowed(command: Node): boolean {
 
 function isFileWritingRedirect(redirect: Node): boolean {
   const operator = redirect.children.find((child) => !child.isNamed)?.type;
+  const destination = redirect.childForFieldName("destination")?.text;
+
+  // dev null is obviously not an actual write
+  if (destination === "/dev/null") {
+    return false;
+  }
 
   // Missing operators cannot be classified as writes
   if (!operator) {
