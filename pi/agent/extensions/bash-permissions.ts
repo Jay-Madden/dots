@@ -55,6 +55,8 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "dirname" },
   { name: "which" },
   { name: "echo" },
+  // -v assigns to a shell variable instead of writing to stdout.
+  { name: "printf", blockedCommands: new Set(["-v"]) },
   // ==========
   // Shell control primitives that do not mutate external state.
   { name: "true" },
