@@ -59,7 +59,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: diagnosticsToolName,
     label: "Get Diagnostics",
-    description: "Refresh a file and return all current LSP error diagnostics.",
+    description: "Request a fresh LSP diagnostic publication for a file and show all errors when it arrives.",
     parameters: Type.Object({
       path: Type.String({
         description: "File path relative to the current working directory",
