@@ -9,6 +9,7 @@ import type {
   WriteToolInput,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 import type {
   Diagnostic,
   PublishDiagnosticsParams,
@@ -26,7 +27,11 @@ type DiagnosticDetails = {
   file: string;
   count: number;
   diagnostics: string;
+  remaining: number;
 };
+
+const automaticDiagnosticLimit = 10;
+const diagnosticsToolName = "get_diagnostics";
 
 export default function (pi: ExtensionAPI) {
   const clients: LspClient[] = [];
@@ -34,17 +39,54 @@ export default function (pi: ExtensionAPI) {
   const versions = new Map<string, number>();
   const published = new Map<string, string>();
 
+  const showAllRequests = new Set<string>();
+
   pi.registerMessageRenderer<DiagnosticDetails>(
     "lsp-diagnostics",
     (message, options, theme) => {
       const details = message.details as DiagnosticDetails;
-      const label = `${details.serverName}: ${details.count} error${details.count === 1 ? "" : "s"} in ${details.file}`;
+      const remainingLabel = details.remaining > 0
+        ? ` (${details.remaining} more available)`
+        : "";
+      const label = `${details.serverName}: ${details.count} error${details.count === 1 ? "" : "s"} in ${details.file}${remainingLabel}`;
       const text = options.expanded
         ? `${theme.fg("error", label)}\n${theme.fg("dim", details.diagnostics)}`
         : theme.fg("dim", label);
       return new Text(text, 1, 0);
     },
   );
+
+  pi.registerTool({
+    name: diagnosticsToolName,
+    label: "Get Diagnostics",
+    description: "Refresh a file and return all current LSP error diagnostics.",
+    parameters: Type.Object({
+      path: Type.String({
+        description: "File path relative to the current working directory",
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const path = params.path.replace(/^@/, "");
+      const language = languageByExtension[extname(path).toLowerCase()];
+      if (!language) {
+        throw new Error(`No language server configured for ${path}`);
+      }
+
+      const file = resolve(ctx.cwd, path);
+      const uri = pathToFileURL(file).href;
+      const version = (versions.get(uri) ?? 0) + 1;
+      showAllRequests.add(uri);
+      await syncFile(language, file, ctx.cwd, ctx, version);
+
+      return {
+        content: [{
+          type: "text",
+          text: `Requested fresh diagnostics for ${path}.`,
+        }],
+        details: { path, version },
+      };
+    },
+  });
 
   const ensureClient = async (
     language: LspLanguage,
@@ -115,11 +157,12 @@ export default function (pi: ExtensionAPI) {
     file: string,
     workspace: string,
     ctx: ExtensionContext,
+    requestedVersion?: number,
   ) {
     const active = await ensureClient(language, workspace, ctx);
     const uri = pathToFileURL(file).href;
     const text = await readFile(file, "utf8");
-    const version = (versions.get(uri) ?? 0) + 1;
+    const version = requestedVersion ?? (versions.get(uri) ?? 0) + 1;
     versions.set(uri, version);
 
     if (version === 1) {
@@ -149,8 +192,9 @@ export default function (pi: ExtensionAPI) {
     const errors = params.diagnostics.filter(
       (diagnostic) => diagnostic.severity === DiagnosticSeverity.Error,
     );
+    const showAll = showAllRequests.delete(params.uri);
     const signature = JSON.stringify(errors);
-    if (published.get(params.uri) === signature) {
+    if (!showAll && published.get(params.uri) === signature) {
       return;
     }
     published.set(params.uri, signature);
@@ -159,23 +203,31 @@ export default function (pi: ExtensionAPI) {
     }
 
     const file = relative(cwd, fileURLToPath(params.uri));
-    const diagnostics = errors.map(formatDiagnostic).join("\n");
+    const shown = showAll ? errors : errors.slice(0, automaticDiagnosticLimit);
+    const diagnostics = shown.map(formatDiagnostic).join("\n");
+    const remainingCount = errors.length - shown.length;
+    const suffix = remainingCount > 0
+      ? `\n${remainingCount} more diagnostics are available. Call ${diagnosticsToolName} to retrieve them.`
+      : "";
+
     pi.sendMessage(
       {
         customType: "lsp-diagnostics",
-        content: `${serverName} diagnostics for ${file}:\n${diagnostics}`,
+        content: `${serverName} diagnostics for ${file}:\n${diagnostics}${suffix}`,
         display: true,
         details: {
           serverName,
           file,
           count: errors.length,
           diagnostics,
+          remaining: remainingCount,
         } satisfies DiagnosticDetails,
       },
       { deliverAs: "steer", triggerTurn: true },
     );
   }
 }
+
 
 function formatDiagnostic(diagnostic: Diagnostic): string {
   const line = diagnostic.range.start.line + 1;

@@ -19,6 +19,7 @@
   "dependencies": {
     "@types/emscripten": "^1.41.5",
     "tree-sitter-bash": "^0.25.1",
+    "typebox": "^1.1.38",
     "vscode-jsonrpc": "^9.0.1",
     "vscode-languageserver-protocol": "^3.18.2",
     "web-tree-sitter": "^0.26.11"
