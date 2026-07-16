@@ -15,6 +15,12 @@ type AllowedCommand = {
   blockedCommands?: Set<string>;
 };
 
+type ApprovalFindings = {
+  commands: string[];
+  arguments: string[];
+  writes: string[];
+};
+
 const allowedCommands = new Set<AllowedCommand>([
   { name: "ls" },
   { name: "cat" },
@@ -119,7 +125,12 @@ export default function (pi: ExtensionAPI) {
       return undefined;
     }
 
-    const blocked = blockedCommands(command);
+    const findings = getApprovalFindings(command);
+    const blocked = [
+      ...findings.commands,
+      ...findings.arguments,
+      ...findings.writes,
+    ];
     if (blocked.length === 0) {
       return undefined;
     }
@@ -129,7 +140,9 @@ export default function (pi: ExtensionAPI) {
           ...highlightCode(command, "bash"),
           "",
           ctx.ui.theme.fg("accent", "Requires approval:"),
-          ...blocked.flatMap((item) => highlightCode(item, "bash")),
+          ...renderGroup("Commands", findings.commands, ctx),
+          ...renderGroup("Arguments", findings.arguments, ctx),
+          ...renderGroup("File writes", findings.writes, ctx),
         ].join("\n");
     const result = await approval(
       ctx,
@@ -143,37 +156,49 @@ export default function (pi: ExtensionAPI) {
   });
 }
 
-function blockedCommands(source: string): string[] {
+function getApprovalFindings(source: string): ApprovalFindings {
   const tree = parser.parse(source);
   if (!tree || tree.rootNode.hasError) {
-    return [source];
+    return { commands: [source], arguments: [], writes: [] };
   }
 
-  const blocked = redirectsQuery
+  const commandFindings = commandsQuery
     .captures(tree.rootNode)
-    .map((capture) => capture.node)
-    .filter(isFileWritingRedirect)
-    .map((redirect) => redirect.text);
+    .map((capture) => findingsForCommand(capture.node));
 
-  blocked.push(
-    ...commandsQuery
-      .captures(tree.rootNode)
-      .map((capture) => capture.node)
-      .filter((command) => !isCommandAllowed(command))
-      .map((command) => command.text),
-  );
-  return [...new Set(blocked)];
+  return {
+    commands: Array.from(
+      new Set(commandFindings.flatMap((finding) => finding.commands)),
+    ),
+    arguments: Array.from(
+      new Set(commandFindings.flatMap((finding) => finding.arguments)),
+    ),
+    writes: Array.from(
+      new Set(
+        redirectsQuery
+          .captures(tree.rootNode)
+          .map((capture) => capture.node)
+          .filter(isFileWritingRedirect)
+          .map((redirect) => redirect.parent?.text ?? redirect.text),
+      ),
+    ),
+  };
 }
 
-function isCommandAllowed(command: Node): boolean {
+function findingsForCommand(command: Node): Omit<ApprovalFindings, "writes"> {
   const nameNode = command.childForFieldName("name");
   if (!nameNode || nameNode.type !== "command_name") {
-    return false;
+    return { commands: [command.text], arguments: [] };
   }
 
   const arguments_ = command.childrenForFieldName("argument").map((node) => node.text);
-  return matchesAllowedCommand(nameNode.text, arguments_, allowedCommands);
-}
+  return findingsForAllowedCommand(
+    nameNode.text,
+    arguments_,
+    allowedCommands,
+    command.text,
+  );
+} 
 
 function isFileWritingRedirect(redirect: Node): boolean {
   const operator = redirect.children.find((child) => !child.isNamed)?.type;
@@ -198,29 +223,53 @@ function isFileWritingRedirect(redirect: Node): boolean {
   return [">", ">>", ">|", "<>", "&>", "&>>"].includes(operator);
 }
 
-function matchesAllowedCommand(
+function findingsForAllowedCommand(
   name: string,
   arguments_: string[],
   allowed: Set<AllowedCommand>,
-): boolean {
+  source: string,
+): Omit<ApprovalFindings, "writes"> {
   const match = [...allowed].find((item) => item.name === name);
   if (!match) {
-    return false;
+    return { commands: [source], arguments: [] };
   }
-  if (
-    match.blockedCommands &&
-    arguments_.some((argument) =>
-      // some commands can do --out=foo.txt which we detect here
-      match.blockedCommands?.has(argument.split("=", 1)[0] ?? ""),
-    )
-  ) {
-    return false;
-  }
+
+  const hasBlockedArguments = arguments_.some((argument) =>
+    match.blockedCommands?.has(argument.split("=", 1)[0] ?? ""),
+  );
+  const blockedArguments = hasBlockedArguments ? [source] : [];
   if (!match.allowedCommands) {
-    return true;
+    return { commands: [], arguments: blockedArguments };
   }
 
   const [next, ...remaining] = arguments_;
-  return next !== undefined && matchesAllowedCommand(next, remaining, match.allowedCommands);
+  if (next === undefined) {
+    return { commands: [source], arguments: blockedArguments };
+  }
+
+  const nested = findingsForAllowedCommand(
+    next,
+    remaining,
+    match.allowedCommands,
+    source,
+  );
+  return {
+    commands: nested.commands,
+    arguments: [...blockedArguments, ...nested.arguments],
+  };
+}
+
+function renderGroup(
+  label: string,
+  items: string[],
+  ctx: Parameters<typeof approval>[0],
+): string[] {
+  if (items.length === 0) {
+    return [];
+  }
+  return [
+    ctx.ui.theme.fg("warning", `  ${label}`),
+    ...items.flatMap((item) => highlightCode(`    ${item}`, "bash")),
+  ];
 }
 
