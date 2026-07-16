@@ -86,7 +86,6 @@ export class LspClient {
   readonly process: ChildProcessWithoutNullStreams;
   readonly connection: MessageConnection;
   private stopped = false;
-  private testValue = true;
 
   private constructor(
     name: string,
