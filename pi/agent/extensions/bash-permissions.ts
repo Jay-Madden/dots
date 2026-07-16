@@ -47,6 +47,7 @@ const allowedCommands = new Set<AllowedCommand>([
   },
   { name: "tree", blockedCommands: new Set(["-o"]) },
   { name: "wc" },
+  { name: "nl" },
   { name: "stat" },
   { name: "file" },
   { name: "sort" },
@@ -200,7 +201,7 @@ function findingsForCommand(command: Node): Omit<ApprovalFindings, "writes"> {
     allowedCommands,
     command.text,
   );
-} 
+}
 
 function isFileWritingRedirect(redirect: Node): boolean {
   const operator = redirect.children.find((child) => !child.isNamed)?.type;
