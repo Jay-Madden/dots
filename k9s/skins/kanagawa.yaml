@@ -1,124 +1,100 @@
 # -----------------------------------------------------------------------------
-# Kanagawa skin
+# Kanagawa Wave skin
+#
+# Palette synchronized with pi/agent/themes/kanagawa-wave.json and the local
+# Neovim Kanagawa Wave setup (which overrides sumiInk3 to #22222C).
 # -----------------------------------------------------------------------------
-
-# Styles...
-fujiWhite: &fujiWhite "#DCD7BA" 
-oldWhite: &oldWhite "#C8C093" 
-sumiInk0: &sumiInk0 "#16161D" 
-sumiInk1: &sumiInk1 "default" 
-sumiInk2: &sumiInk2 "#2A2A37" 
-sumiInk3: &sumiInk3 "#363646" 
-sumiInk4: &sumiInk4 "#54546D" 
-waveBlue1: &waveBlue1 "#223249" 
-waveBlue2: &waveBlue2 "#2D4F67" 
-winterGreen: &winterGreen "#2B3328" 
-winterYellow: &winterYellow "#49443C" 
-winterRed: &winterRed "#43242B" 
-winterBlue: &winterBlue "#252535" 
-autumnGreen: &autumnGreen "#76946A" 
-autumnRed: &autumnRed "#C34043" 
-autumnYellow: &autumnYellow "#DCA561" 
-samuraiRed: &samuraiRed "#E82424" 
-roninYellow: &roninYellow "#FF9E3B" 
-waveAqua1: &waveAqua1 "#6A9589" 
-dragonBlue: &dragonBlue "#658594" 
-fujiGray: &fujiGray "#727169" 
-springViolet1: &springViolet1 "#938AA9" 
-oniViolet: &oniViolet "#957FB8" 
-crystalBlue: &crystalBlue "#7E9CD8" 
-springViolet2: &springViolet2 "#9CABCA" 
-springBlue: &springBlue "#7FB4CA" 
-lightBlue: &lightBlue "#A3D4D5" 
-waveAqua2: &waveAqua2 "#7AA89F" 
-springGreen: &springGreen "#98BB6C" 
-boatYellow1: &boatYellow1 "#938056" 
-boatYellow2: &boatYellow2 "#C0A36E" 
-carpYellow: &carpYellow "#E6C384" 
-sakuraPink: &sakuraPink "#D27E99" 
-waveRed: &waveRed "#E46876" 
-peachRed: &peachRed "#FF5D62" 
-surimiOrange: &surimiOrange "#FFA066" 
-katanaGray: &katanaGray "#717C7C" 
+fujiWhite: &fujiWhite "#DCD7BA"
+oldWhite: &oldWhite "#C8C093"
+sumiInk0: &sumiInk0 "#16161D"
+sumiInk1: &sumiInk1 "#181820"
+sumiInk2: &sumiInk2 "#1A1A22"
+sumiInk3: &sumiInk3 "#22222C"
+sumiInk4: &sumiInk4 "#2A2A37"
+sumiInk5: &sumiInk5 "#363646"
+sumiInk6: &sumiInk6 "#54546D"
+waveBlue1: &waveBlue1 "#223249"
+waveBlue2: &waveBlue2 "#2D4F67"
+winterRed: &winterRed "#43242B"
+autumnGreen: &autumnGreen "#76946A"
+autumnRed: &autumnRed "#C34043"
+samuraiRed: &samuraiRed "#E82424"
+roninYellow: &roninYellow "#FF9E3B"
+waveAqua1: &waveAqua1 "#6A9589"
+fujiGray: &fujiGray "#727169"
+oniViolet: &oniViolet "#957FB8"
+crystalBlue: &crystalBlue "#7E9CD8"
+springViolet1: &springViolet1 "#938AA9"
+springViolet2: &springViolet2 "#9CABCA"
+springBlue: &springBlue "#7FB4CA"
+waveAqua2: &waveAqua2 "#7AA89F"
+springGreen: &springGreen "#98BB6C"
+boatYellow2: &boatYellow2 "#C0A36E"
+carpYellow: &carpYellow "#E6C384"
+sakuraPink: &sakuraPink "#D27E99"
+surimiOrange: &surimiOrange "#FFA066"
 
 k9s:
   body:
     fgColor: *fujiWhite
-    bgColor: *sumiInk1
+    bgColor: *sumiInk3
     logoColor: *crystalBlue
 
-  # ClusterInfoView styles
   info:
     fgColor: *crystalBlue
-    sectionColor: *fujiWhite
+    sectionColor: *carpYellow
 
   prompt:
     fgColor: *fujiWhite
-    bgColor: *sumiInk1
+    bgColor: *sumiInk3
     suggestColor: *fujiGray
 
   dialog:
     fgColor: *fujiWhite
-    bgColor: *sumiInk1
-      
-  # Frame styles
+    bgColor: *sumiInk2
+
   frame:
-    # Borders styles
     border:
-      fgColor: *sumiInk4
-      focusColor: *oldWhite
-    # Border title styles.
+      fgColor: *sumiInk6
+      focusColor: *springViolet2
     title:
-      fgColor: *fujiWhite
+      fgColor: *carpYellow
       bgColor: *sumiInk0
       highlightColor: *crystalBlue
       counterColor: *sakuraPink
-      filterColor: slategray
-    # CrumbView attributes for history navigation.
+      filterColor: *fujiGray
     crumbs:
       fgColor: *fujiWhite
       bgColor: *sumiInk4
       activeColor: *waveBlue2
-
-    # MenuView attributes and styles
     menu:
       fgColor: *oldWhite
       keyColor: *waveAqua2
-      # Used for favorite namespaces
       numKeyColor: *oniViolet
-
-    # Resource status and update styles
     status:
       newColor: *springViolet2
       modifyColor: *springBlue
-      addColor: *springBlue
+      addColor: *springGreen
       errorColor: *autumnRed
       highlightcolor: *surimiOrange
-      killColor: slategray
+      killColor: *samuraiRed
       completedColor: *fujiGray
 
-  # Specific views styles
   views:
-    # TableView attributes.
     table:
       fgColor: *fujiWhite
-      bgColor: *sumiInk1
-      cursorColor: *sumiInk2
+      bgColor: *sumiInk3
+      cursorColor: *waveBlue2
       cursorFgColor: *fujiWhite
-      cursorBgColor: black 
-      # Header row styles.
+      cursorBgColor: *waveBlue2
       header:
         fgColor: *fujiWhite
-        bgColor: *sumiInk2
+        bgColor: *sumiInk4
         sorterColor: *roninYellow
-          #
-    # YAML info styles.
     yaml:
       keyColor: *carpYellow
       colonColor: *springViolet2
       valueColor: *springGreen
-        #
-    # Logs styles.
     logs:
       fgColor: *fujiWhite
-      bgColor: *sumiInk1
+      bgColor: *sumiInk3
