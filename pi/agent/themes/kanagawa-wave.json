@@ -82,11 +82,12 @@
     "syntaxOperator": "boatYellow2",
     "syntaxPunctuation": "springViolet2",
     "thinkingOff": "sumiInk6",
-    "thinkingMinimal": "waveAqua1",
-    "thinkingLow": "springBlue",
+    "thinkingMinimal": "waveBlue2",
+    "thinkingLow": "waveAqua1",
     "thinkingMedium": "crystalBlue",
-    "thinkingHigh": "oniViolet2",
-    "thinkingXhigh": "peachRed",
+    "thinkingHigh": "springBlue",
+    "thinkingXhigh": "springViolet2",
+    "thinkingMax": "oniViolet2",
     "bashMode": "carpYellow"
   },
   "export": {

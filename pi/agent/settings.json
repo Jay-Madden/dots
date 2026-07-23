@@ -1,6 +1,6 @@
 {
-  "lastChangelogVersion": "0.80.7",
-  "defaultThinkingLevel": "medium",
+  "lastChangelogVersion": "0.81.1",
+  "defaultThinkingLevel": "xhigh",
   "outputPad": 1,
   "editorPaddingX": 1,
   "theme": "kanagawa-wave",

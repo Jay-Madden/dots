@@ -28,6 +28,7 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "tail" },
   { name: "grep" },
   { name: "rg" },
+  { name: "jq" },
   {
     name: "fd",
     blockedCommands: new Set(["--exec", "-x", "--exec-batch", "-X"]),
