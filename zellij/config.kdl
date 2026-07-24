@@ -158,6 +158,16 @@ keybinds clear-defaults=true {
         bind "Alt i" { MoveTab "left"; }
         bind "Alt j" { MoveFocus "down"; }
         bind "Alt k" { MoveFocus "up"; }
+        bind "Alt g" {
+            Run "lazygit" {
+                floating true
+                close_on_exit true
+                x "8%"
+                y "8%"
+                width "85%"
+                height "85%"
+            }
+        }
         bind "Alt l" { MoveFocusOrTab "right"; }
         bind "Alt n" { NewPane; }
         bind "Alt o" { MoveTab "right"; }
@@ -167,6 +177,10 @@ keybinds clear-defaults=true {
             Run "/Users/jcox/.config/zellij/zt" "--floating" {
                 floating true
                 close_on_exit true
+                x "5%"
+                y "5%"
+                width "90%"
+                height "90%"
             }
         }
         bind "Ctrl q" { Quit; }

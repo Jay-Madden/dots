@@ -2,18 +2,44 @@
 
 set -o pipefail
 
+if [[ ${1:-} == "--source" ]]; then
+  tabs=$(zellij action list-tabs --json) || exit
+  panes=$(zellij action list-panes --json) || exit
+
+  jq -nr --argjson tabs "$tabs" --argjson panes "$panes" '
+    $tabs[] as $tab
+    | ([$panes[]
+        | select(.tab_id == $tab.tab_id and (.is_suppressed | not) and (.is_floating | not))]
+       | sort_by([.is_plugin, (.is_focused | not)])
+       | first) as $pane
+    | select($pane != null)
+    | ($tab.name | gsub("\\|"; "/")) as $name
+    | "\($tab.tab_id)|\(if $pane.is_plugin then "plugin_" else "terminal_" end)\($pane.id)|\($tab.position + 1)|\($name)"
+  '
+  exit
+fi
+
+if [[ ${1:-} == "--preview" ]]; then
+  [[ -n ${2:-} ]] || exit
+  exec zellij action dump-screen --ansi --pane-id "$2"
+fi
+
+script_path=$(printf '%q' "${BASH_SOURCE[0]}")
 args=(
-  --source-command 'zellij action list-tabs | tail -n +2'
-  --no-preview
+  --source-command "$script_path --source"
+  --source-display '{split:|:2}: {split:|:3}'
+  --source-output '{split:|:0}'
+  --preview-command "$script_path --preview {split:|:1}"
+  --preview-header '{split:|:3}'
+  # --preview-size 65
   --input-header 'Zellij tabs'
 )
 
-if [[ ${1:-} != "--floating" ]]; then
-  args+=(--ui-scale 40)
-fi
+# if [[ ${1:-} != "--floating" ]]; then
+#   args+=(--ui-scale 80)
+# fi
 
 selection=$(tv "${args[@]}") || exit
 [[ -n $selection ]] || exit
 
-tab_id=${selection%%[[:space:]]*}
-zellij action go-to-tab-by-id "$tab_id"
+zellij action go-to-tab-by-id "$selection"
