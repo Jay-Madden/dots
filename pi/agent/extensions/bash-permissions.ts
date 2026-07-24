@@ -250,7 +250,7 @@ function isFileWritingRedirect(redirect: Node): boolean {
     return false;
   }
 
-  // Missing operators cannot be classified as writes
+  // Missing operators cant be classified as writes
   if (!operator) {
     return false;
   }

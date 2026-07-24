@@ -163,6 +163,12 @@ keybinds clear-defaults=true {
         bind "Alt o" { MoveTab "right"; }
         bind "Alt p" { TogglePaneInGroup; }
         bind "Alt Shift p" { ToggleGroupMarking; }
+        bind "Alt t" {
+            Run "/Users/jcox/.config/zellij/zt" "--floating" {
+                floating true
+                close_on_exit true
+            }
+        }
         bind "Ctrl q" { Quit; }
     }
     shared_except "locked" "session" {

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+
+args=(
+  --source-command 'zellij action list-tabs | tail -n +2'
+  --no-preview
+  --input-header 'Zellij tabs'
+)
+
+if [[ ${1:-} != "--floating" ]]; then
+  args+=(--ui-scale 40)
+fi
+
+selection=$(tv "${args[@]}") || exit
+[[ -n $selection ]] || exit
+
+tab_id=${selection%%[[:space:]]*}
+zellij action go-to-tab-by-id "$tab_id"

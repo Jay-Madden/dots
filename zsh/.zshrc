@@ -342,6 +342,8 @@ source <(kubectl completion zsh)
 # Simple cluster selector
 alias cs="export KUBECONFIG=\$(fd '.*' $HOME/.kube/configs/* | tv --ui-scale 40)"
 
+alias zt="$HOME/.config/zellij/zt"
+
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
 if type eza >/dev/null 2>&1; then
