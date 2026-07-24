@@ -31,13 +31,8 @@ args=(
   --source-output '{split:|:0}'
   --preview-command "$script_path --preview {split:|:1}"
   --preview-header '{split:|:3}'
-  # --preview-size 65
   --input-header 'Zellij tabs'
 )
-
-# if [[ ${1:-} != "--floating" ]]; then
-#   args+=(--ui-scale 80)
-# fi
 
 selection=$(tv "${args[@]}") || exit
 [[ -n $selection ]] || exit

@@ -162,10 +162,8 @@ keybinds clear-defaults=true {
             Run "lazygit" {
                 floating true
                 close_on_exit true
-                x "8%"
-                y "8%"
-                width "85%"
-                height "85%"
+                width "95%"
+                height "95%"
             }
         }
         bind "Alt l" { MoveFocusOrTab "right"; }
@@ -174,7 +172,7 @@ keybinds clear-defaults=true {
         bind "Alt p" { TogglePaneInGroup; }
         bind "Alt Shift p" { ToggleGroupMarking; }
         bind "Alt t" {
-            Run "/Users/jcox/.config/zellij/zt" "--floating" {
+            Run "sh" "-c" "exec \"$HOME/.config/zellij/zt\" --floating" {
                 floating true
                 close_on_exit true
                 x "5%"
