@@ -52,6 +52,17 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "stat" },
   { name: "file" },
   { name: "sort" },
+  { name: "cut" },
+  { name: "tr" },
+  { name: "sha256sum" },
+  { name: "ps" },
+  {
+    name: "command",
+    allowedCommands: new Set([
+      { name: "-v" },
+      { name: "-V" },
+    ]),
+  },
   { name: "pwd" },
   { name: "basename" },
   { name: "dirname" },
@@ -96,6 +107,32 @@ const allowedCommands = new Set<AllowedCommand>([
           "--edit-description",
           "--set-upstream-to",
           "--unset-upstream",
+        ]),
+      },
+    ]),
+  },
+  {
+    name: "glab",
+    allowedCommands: new Set([
+      {
+        name: "mr",
+        allowedCommands: new Set([
+          { name: "list" },
+          { name: "view", blockedCommands: new Set(["--web", "-w"]) },
+          { name: "diff" },
+        ]),
+      },
+    ]),
+  },
+  {
+    name: "gh",
+    allowedCommands: new Set([
+      {
+        name: "pr",
+        allowedCommands: new Set([
+          { name: "list" },
+          { name: "view", blockedCommands: new Set(["--web", "-w"]) },
+          { name: "diff", blockedCommands: new Set(["--web"]) },
         ]),
       },
     ]),
