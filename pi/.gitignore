@@ -2,6 +2,7 @@
 models.json
 auth.json
 sessions/
+/agent/local/
 
 # Logs
 logs

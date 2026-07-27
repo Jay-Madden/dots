@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
   highlightCode,
@@ -9,7 +10,7 @@ import { Language, Parser, Query, type Node } from "web-tree-sitter";
 const require = createRequire(import.meta.url);
 const { parser, commandsQuery, redirectsQuery } = await loadParser();
 
-type AllowedCommand = {
+export type AllowedCommand = {
   name: string;
   allowedCommands?: Set<AllowedCommand>;
   blockedCommands?: Set<string>;
@@ -86,6 +87,25 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "diff" },
   { name: "glean-cli" },
   {
+    name: "go",
+    allowedCommands: new Set([
+      { name: "version" },
+      { name: "env", blockedCommands: new Set(["-w", "-u"]) },
+      {
+        name: "list",
+        blockedCommands: new Set(["-exec", "-mod", "-modfile", "-overlay"]),
+      },
+      {
+        name: "mod",
+        allowedCommands: new Set([
+          { name: "download" },
+          { name: "graph" },
+          { name: "why" },
+        ]),
+      },
+    ]),
+  },
+  {
     name: "git",
     allowedCommands: new Set([
       { name: "status" },
@@ -137,7 +157,20 @@ const allowedCommands = new Set<AllowedCommand>([
       },
     ]),
   },
+  ...(await loadLocalAllowedCommands()),
 ]);
+
+async function loadLocalAllowedCommands(): Promise<AllowedCommand[]> {
+  const path = new URL("../local/bash-permissions.ts", import.meta.url);
+  if (!existsSync(path)) {
+    return [];
+  }
+
+  const local = await import(path.href) as {
+    localAllowedCommands?: Iterable<AllowedCommand>;
+  };
+  return [...(local.localAllowedCommands ?? [])];
+}
 
 async function loadParser(): Promise<{
   parser: Parser;
@@ -270,34 +303,48 @@ function findingsForAllowedCommand(
   allowed: Set<AllowedCommand>,
   source: string,
 ): Omit<ApprovalFindings, "writes"> {
-  const match = [...allowed].find((item) => item.name === name);
-  if (!match) {
+  const matches = [...allowed].filter((item) => item.name === name);
+  if (matches.length === 0) {
     return { commands: [source], arguments: [] };
   }
 
-  const hasBlockedArguments = arguments_.some((argument) =>
-    match.blockedCommands?.has(argument.split("=", 1)[0] ?? ""),
-  );
-  const blockedArguments = hasBlockedArguments ? [source] : [];
-  if (!match.allowedCommands) {
-    return { commands: [], arguments: blockedArguments };
-  }
+  const findings = matches.map((match) => {
+    const hasBlockedArguments = arguments_.some((argument) =>
+      match.blockedCommands?.has(argument.split("=", 1)[0] ?? ""),
+    );
+    const blockedArguments = hasBlockedArguments ? [source] : [];
+    if (!match.allowedCommands) {
+      return { commands: [], arguments: blockedArguments };
+    }
 
-  const [next, ...remaining] = arguments_;
-  if (next === undefined) {
-    return { commands: [source], arguments: blockedArguments };
-  }
+    const [next, ...remaining] = arguments_;
+    if (next === undefined) {
+      return { commands: [source], arguments: blockedArguments };
+    }
 
-  const nested = findingsForAllowedCommand(
-    next,
-    remaining,
-    match.allowedCommands,
-    source,
+    const nested = findingsForAllowedCommand(
+      next,
+      remaining,
+      match.allowedCommands,
+      source,
+    );
+    return {
+      commands: nested.commands,
+      arguments: [...blockedArguments, ...nested.arguments],
+    };
+  });
+
+  const allowedFinding = findings.find(
+    (finding) => finding.commands.length === 0 && finding.arguments.length === 0,
   );
-  return {
-    commands: nested.commands,
-    arguments: [...blockedArguments, ...nested.arguments],
-  };
+  return allowedFinding ?? findings.reduce((best, candidate) => {
+    const bestCount = best.commands.length + best.arguments.length;
+    const candidateCount = candidate.commands.length + candidate.arguments.length;
+    if (candidateCount !== bestCount) {
+      return candidateCount < bestCount ? candidate : best;
+    }
+    return candidate.commands.length < best.commands.length ? candidate : best;
+  });
 }
 
 function renderGroup(
