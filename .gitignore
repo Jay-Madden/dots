@@ -4,6 +4,8 @@
 # Except these
 !.gitignore
 !README.md
+!Brewfile
+!mac_install.sh
 
 !.github/
 !.github/*
