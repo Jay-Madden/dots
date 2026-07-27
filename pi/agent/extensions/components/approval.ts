@@ -40,6 +40,26 @@ export async function approval(
 
     return {
       handleInput(data: string) {
+        if (matchesKey(data, Key.ctrl("c"))) {
+          let timeout: ReturnType<typeof setTimeout>;
+          const removeListener = tui.addInputListener((nextData) => {
+            if (!matchesKey(nextData, Key.ctrl("c"))) {
+              return;
+            }
+
+            clearTimeout(timeout);
+            removeListener();
+            // Cancel the in progress model request so we shutdown immediately
+            ctx.abort();
+            ctx.shutdown();
+            return { consume: true };
+          });
+          timeout = setTimeout(removeListener, 500);
+
+          done({ approved: false, reason: defaultReason });
+          return;
+        }
+
         if (keybindings.matches(data, "app.tools.expand")) {
           ctx.ui.setToolsExpanded(!ctx.ui.getToolsExpanded());
           tui.requestRender();
