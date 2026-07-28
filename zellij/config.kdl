@@ -26,7 +26,7 @@ keybinds clear-defaults=true {
         bind "n" { NewPane; SwitchToMode "normal"; }
         bind "p" { SwitchFocus; }
         bind "Ctrl b" { SwitchToMode "normal"; }
-        bind "r" { NewPane "right"; SwitchToMode "normal"; }
+        bind "r" { NewPane "right" { borderless true; }; SwitchToMode "normal"; }
         bind "s" { NewPane "stacked"; SwitchToMode "normal"; }
         bind "w" { ToggleFloatingPanes; SwitchToMode "normal"; }
         bind "z" { TogglePaneFrames; SwitchToMode "normal"; }
@@ -154,7 +154,7 @@ keybinds clear-defaults=true {
         bind "Alt [" { PreviousSwapLayout; }
         bind "Alt ]" { NextSwapLayout; }
         bind "Alt f" { ToggleFloatingPanes; }
-        bind "Alt h" { MoveFocusOrTab "left"; }
+        bind "Alt h" { GoToPreviousTab; }
         bind "Alt i" { MoveTab "left"; }
         bind "Alt j" { MoveFocus "down"; }
         bind "Alt k" { MoveFocus "up"; }
@@ -166,7 +166,7 @@ keybinds clear-defaults=true {
                 height "95%"
             }
         }
-        bind "Alt l" { MoveFocusOrTab "right"; }
+        bind "Alt l" { GoToNextTab; }
         bind "Alt n" { NewPane; }
         bind "Alt o" { MoveTab "right"; }
         bind "Alt p" { TogglePaneInGroup; }
@@ -261,7 +261,7 @@ keybinds clear-defaults=true {
         bind "8" { GoToTab 8; SwitchToMode "normal"; }
         bind "9" { GoToTab 9; SwitchToMode "normal"; }
         bind "\"" { NewPane "down"; SwitchToMode "locked"; }
-        bind "%" { NewPane "right"; SwitchToMode "locked"; }
+        bind "%" { NewPane "right" { borderless true; }; SwitchToMode "locked"; }
         bind "," { SwitchToMode "renametab"; }
         bind "[" { SwitchToMode "scroll"; }
         bind "Ctrl b" { Write 2; SwitchToMode "locked"; }
