@@ -32,10 +32,6 @@ zsh/.zsh_sessions/
 !tmux/
 !tmux/*
 
-# Merged specific config
-!opencode/
-!opencode/*
-
 !pi/
 !pi/*
 
