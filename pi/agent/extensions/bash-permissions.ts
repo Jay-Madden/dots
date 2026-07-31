@@ -2,9 +2,12 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
   highlightCode,
+  keyHint,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { approval } from "./components/approval.ts";
+import { Type } from "typebox";
+import { Text } from "@earendil-works/pi-tui";
 import { Language, Parser, Query, type Node } from "web-tree-sitter";
 
 const require = createRequire(import.meta.url);
@@ -189,6 +192,33 @@ async function loadParser(): Promise<{
 }
 
 export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "bash_permission_state",
+    label: "Bash Permission State",
+    description: "Load the current bash extension allowlist and approval rules on demand",
+    parameters: Type.Object({}),
+    async execute() {
+      const bashRules = renderAllowedCommandRules(allowedCommands);
+      return {
+        content: [{
+          type: "text",
+          text: bashRules.join("\n"),
+        }],
+        details: { ruleCount: bashRules.length },
+      };
+    },
+    renderResult(result, { expanded }, theme) {
+      const ruleCount = result.details?.ruleCount ?? 0;
+      const text = expanded
+        ? renderBashPermissionPrompt(allowedCommands)
+        : theme.fg(
+          "muted",
+          `Loaded ${ruleCount} bash permission rules (${keyHint("app.tools.expand", "to expand")})`,
+        );
+      return new Text(text, 0, 0);
+    },
+  });
+
   pi.on("tool_call", async (event, ctx) => {
     if (event.toolName !== "bash") {
       return undefined;
@@ -344,6 +374,43 @@ function findingsForAllowedCommand(
       return candidateCount < bestCount ? candidate : best;
     }
     return candidate.commands.length < best.commands.length ? candidate : best;
+  });
+}
+
+function renderBashPermissionPrompt(allowed: Set<AllowedCommand>): string {
+  return [
+    "Bash permission state:",
+    "The bash extension runs the command patterns below without interactive approval.",
+    "Each pattern permits any remaining arguments unless approval-required arguments are listed.",
+    ...renderAllowedCommandRules(allowed),
+    "All other commands, unlisted subcommands, approval-required arguments, parse failures, and file-writing redirects require interactive approval.",
+    "Redirection to /dev/null is exempt. Commands in pipelines and compound statements are checked independently.",
+  ].join("\n");
+}
+
+function renderAllowedCommandRules(
+  allowed: Set<AllowedCommand>,
+  prefix: string[] = [],
+  inheritedBlockedArguments: string[] = [],
+): string[] {
+  return [...allowed].flatMap((command) => {
+    const commandPath = [...prefix, command.name];
+    const blockedArguments = [
+      ...inheritedBlockedArguments,
+      ...(command.blockedCommands ?? []),
+    ];
+    if (command.allowedCommands) {
+      return renderAllowedCommandRules(
+        command.allowedCommands,
+        commandPath,
+        blockedArguments,
+      );
+    }
+
+    const restriction = blockedArguments.length === 0
+      ? ""
+      : `; approval-required arguments: ${blockedArguments.join(", ")}`;
+    return [`- ${commandPath.join(" ")} [args...]${restriction}`];
   });
 }
 

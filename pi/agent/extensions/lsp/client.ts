@@ -16,7 +16,6 @@ export type LspLanguage =
   | "typescript"
   | "python"
   | "go"
-  | "yaml"
   | "rust"
   | "lua"
   | "bash";
@@ -33,8 +32,6 @@ export const languageByExtension: Record<string, LspLanguage> = {
   ".py": "python",
   ".pyi": "python",
   ".go": "go",
-  ".yaml": "yaml",
-  ".yml": "yaml",
   ".rs": "rust",
   ".lua": "lua",
   ".sh": "bash",
@@ -62,11 +59,6 @@ export const commands: Record<LspLanguage, LspCommand> = {
   typescript: { name: "vtsls", command: "vtsls", args: ["--stdio"] },
   python: { name: "ty", command: "ty", args: ["server"] },
   go: { name: "gopls", command: "gopls", args: ["serve"] },
-  yaml: {
-    name: "yaml-language-server",
-    command: "yaml-language-server",
-    args: ["--stdio"],
-  },
   rust: { name: "rust-analyzer", command: "rust-analyzer", args: [] },
   lua: {
     name: "lua-language-server",
