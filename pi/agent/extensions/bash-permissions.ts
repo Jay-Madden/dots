@@ -163,6 +163,8 @@ const allowedCommands = new Set<AllowedCommand>([
   ...(await loadLocalAllowedCommands()),
 ]);
 
+const bashPermissionStateToolName = "bash_permission_state";
+
 async function loadLocalAllowedCommands(): Promise<AllowedCommand[]> {
   const path = new URL("../local/bash-permissions.ts", import.meta.url);
   if (!existsSync(path)) {
@@ -193,7 +195,7 @@ async function loadParser(): Promise<{
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
-    name: "bash_permission_state",
+    name: bashPermissionStateToolName,
     label: "Bash Permission State",
     description: "Load the current bash extension allowlist and approval rules on demand",
     parameters: Type.Object({}),
