@@ -9,7 +9,7 @@ description: REQUIRED TO LOAD BEFORE RUNNING BASH COMMANDS. Rules for constructi
 
 - **!!! IMPORTANT:** Load this skill with the read tool before the first bash tool call in a task or session.
 - **!!! IMPORTANT:** After loading this skill, call `bash_permission_state` before the first bash tool call to load the current autonomous-command allowlist into context.
-- **!!! IMPORTANT:** Do not run a bash command until both this skill and the permission state have been loaded.
+- **!!! IMPORTANT:** Do not run a bash command until both this skill and the permission state have been loaded up front.
 - Call `bash_permission_state` again after `/reload` or after bash permissions are changed.
 - The loaded state is informational. The bash permission extension remains the enforcement boundary and may request approval.
 
