@@ -3,17 +3,25 @@ import {
   Input,
   Key,
   matchesKey,
+  type KeyId,
   truncateToWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
 export type Approval = { approved: true } | { approved: false; reason: string };
 
+export type ApprovalShortcut = {
+  key: KeyId;
+  display: string;
+  onSelect: () => Approval | Promise<Approval>;
+};
+
 export async function approval(
   ctx: ExtensionContext,
   title: string,
   message: string,
   defaultReason: string,
+  shortcuts: ApprovalShortcut[] = [],
 ): Promise<Approval> {
   if (ctx.mode !== "tui") {
     const approved = await ctx.ui.confirm(title, message);
@@ -78,6 +86,17 @@ export async function approval(
           return;
         }
 
+        const shortcut = shortcuts.find((item) => matchesKey(data, item.key));
+        if (shortcut) {
+          void Promise.resolve(shortcut.onSelect()).then(done).catch((error: unknown) => {
+            done({
+              approved: false,
+              reason: error instanceof Error ? error.message : defaultReason,
+            });
+          });
+          return;
+        }
+
         if (matchesKey(data, Key.left) || matchesKey(data, Key.up)) {
           selected = "yes";
         } else if (matchesKey(data, Key.right) || matchesKey(data, Key.down)) {
@@ -130,10 +149,18 @@ export async function approval(
         }
 
         lines.push("");
+        const controls = [
+          ` ${theme.fg("dim", "\u2191\u2193")} ${theme.fg("muted", "navigate")}`,
+          `  ${theme.fg("dim", "enter")} ${theme.fg("muted", "select")}`,
+          `  ${theme.fg("dim", "escape/ctrl+c")} ${theme.fg("muted", "cancel")}`,
+          ...shortcuts.map(
+            (item) => `  ${theme.fg("dim", item.key)} ${theme.fg("muted", item.display)}`,
+          ),
+        ];
         lines.push(
           feedbackMode
             ? theme.fg("dim", " Enter reject with message  escape back")
-            : ` ${theme.fg("dim", "\u2191\u2193")} ${theme.fg("muted", "navigate")}  ${theme.fg("dim", "enter")} ${theme.fg("muted", "select")} ${theme.fg("dim", "escape/ctrl+c")} ${theme.fg("muted", "cancel")}`,
+            : controls.join(""),
         );
         lines.push("");
         lines.push(theme.fg("border", "─".repeat(width)));
