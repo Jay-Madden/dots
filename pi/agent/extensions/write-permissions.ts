@@ -3,6 +3,8 @@ import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import {
   createEditToolDefinition,
+  getLanguageFromPath,
+  highlightCode,
   type EditToolInput,
   type ExtensionAPI,
   type ExtensionContext,
@@ -131,6 +133,7 @@ type ReviewComment = {
 
 type ReviewDetails = {
   comments: ReviewComment[];
+  language?: string;
 };
 
 function parseReview(content: string): ReviewComment[] | undefined {
@@ -153,22 +156,40 @@ function isReviewComment(value: unknown): value is ReviewComment {
     && typeof comment.suggested_change === "string";
 }
 
-function renderReview(comments: ReviewComment[], theme: Theme): Text {
+function renderReviewComment(
+  comment: ReviewComment,
+  language: string | undefined,
+  theme: Theme,
+): string[] {
+  const gutter = `${String(comment.line).padStart(4)} | `;
+  const continuation = " ".repeat(gutter.length);
+  const highlighted = highlightCode(comment.suggested_change, language);
+  const code = highlighted.map((line, index) =>
+    `${theme.fg(index === 0 ? "accent" : "dim", index === 0 ? gutter : continuation)}${line}`
+  );
+
+  return [...code, `${continuation}${theme.fg("toolOutput", comment.comment)}`, ""];
+}
+
+function renderReview(
+  comments: ReviewComment[],
+  language: string | undefined,
+  theme: Theme,
+): Text {
   const lines = [
     theme.fg("accent", theme.bold("Review comments")),
-    theme.fg("muted", `${comments.length}`),
+    theme.fg("muted", `${comments.length} comments`),
+    "",
   ];
   for (const comment of comments) {
-    lines.push(theme.fg("muted", `Line ${comment.line}`));
-    lines.push(theme.fg("warning", `  ${comment.suggested_change}`));
-    lines.push(theme.fg("toolOutput", `  ${comment.comment}`));
+    lines.push(...renderReviewComment(comment, language, theme));
   }
   return new Text(lines.join("\n"), 1, 0);
 }
 
 export default function (pi: ExtensionAPI) {
   pi.registerMessageRenderer<ReviewDetails>("review", (message, _options, theme) =>
-    renderReview(message.details?.comments ?? [], theme),
+    renderReview(message.details?.comments ?? [], message.details?.language, theme),
   );
 
   pi.on("tool_call", async (event, ctx) => {
@@ -196,10 +217,13 @@ export default function (pi: ExtensionAPI) {
       const reviewDetails = comments ? parseReview(comments) : undefined;
 
       if (reviewDetails) {
+        const language = getLanguageFromPath(targetPath);
         pi.sendMessage({
           customType: "review",
           content: comments ?? "",
-          details: { comments: reviewDetails },
+          details: language
+            ? { comments: reviewDetails, language }
+            : { comments: reviewDetails },
           display: true,
         });
       }
