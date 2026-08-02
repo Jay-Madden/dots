@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createEditToolDefinition,
   getLanguageFromPath,
@@ -25,6 +26,12 @@ type Review = {
   proposedFile: string;
   commentsFile: string;
 };
+
+const diffLua = fileURLToPath(new URL("./assets/diff.lua", import.meta.url));
+
+function diffCommand(review: Review): string {
+  return `lua local diff = dofile("${diffLua}"); diff.setup(); diff.diff("${review.previousFile}", "${review.commentsFile}")`;
+}
 
 function resolveToolPath(path: string, cwd: string): string {
   const withoutAtPrefix = path.startsWith("@") ? path.slice(1) : path;
@@ -110,7 +117,7 @@ async function reviewChange(
         "nvim",
         review.proposedFile,
         "-c",
-        `Diff ${review.previousFile} ${review.commentsFile}`,
+        diffCommand(review),
       ],
       signal ? { signal } : {},
     );
