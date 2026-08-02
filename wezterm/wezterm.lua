@@ -37,6 +37,14 @@ config.window_padding = {
   bottom = 1,
 }
 
+config.keys = {
+  {
+    key = 'Enter',
+    mods = 'ALT',
+    action = wezterm.action.SendString('\x1b[13;3u'),
+  },
+}
+
 config.window_background_opacity = 1.0
 config.window_decorations = "TITLE|RESIZE|MACOS_USE_BACKGROUND_COLOR_AS_TITLEBAR_COLOR"
 
