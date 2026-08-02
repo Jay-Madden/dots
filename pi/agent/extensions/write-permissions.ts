@@ -4,14 +4,14 @@ import { extname, join, resolve } from "node:path";
 import {
   createEditToolDefinition,
   getLanguageFromPath,
-  highlightCode,
+  getMarkdownTheme,
   type EditToolInput,
   type ExtensionAPI,
   type ExtensionContext,
   type Theme,
   type WriteToolInput,
 } from "@earendil-works/pi-coding-agent";
-import { Key, Text } from "@earendil-works/pi-tui";
+import { Box, Key, Markdown, Text } from "@earendil-works/pi-tui";
 import {
   applyEditsToNormalizedContent,
   normalizeToLF,
@@ -160,31 +160,33 @@ function renderReviewComment(
   comment: ReviewComment,
   language: string | undefined,
   theme: Theme,
-): string[] {
+): Box {
   const gutter = `${String(comment.line).padStart(4)} | `;
-  const continuation = " ".repeat(gutter.length);
-  const highlighted = highlightCode(comment.suggested_change, language);
-  const code = highlighted.map((line, index) =>
-    `${theme.fg(index === 0 ? "accent" : "dim", index === 0 ? gutter : continuation)}${line}`
-  );
-
-  return [...code, `${continuation}${theme.fg("toolOutput", comment.comment)}`, ""];
+  const output = new Box(0, 0);
+  output.addChild(new Markdown(
+    `\`\`\`${language ?? "text"}\n${comment.suggested_change}\n\`\`\``,
+    0,
+    0,
+    { ...getMarkdownTheme(), codeBlockIndent: theme.fg("dim", gutter) },
+  ));
+  output.addChild(new Text(`${" ".repeat(gutter.length)}${theme.fg("toolOutput", comment.comment)}`, 0, 0));
+  output.addChild(new Text("", 0, 0));
+  return output;
 }
 
 function renderReview(
   comments: ReviewComment[],
   language: string | undefined,
   theme: Theme,
-): Text {
-  const lines = [
-    theme.fg("accent", theme.bold("Review comments")),
-    theme.fg("muted", `${comments.length} comments`),
-    "",
-  ];
+): Box {
+  const output = new Box(1, 0);
+  output.addChild(new Text(theme.fg("accent", theme.bold("Review comments")), 0, 0));
+  output.addChild(new Text(theme.fg("muted", `${comments.length} comments`), 0, 0));
+  output.addChild(new Text("", 0, 0));
   for (const comment of comments) {
-    lines.push(...renderReviewComment(comment, language, theme));
+    output.addChild(renderReviewComment(comment, language, theme));
   }
-  return new Text(lines.join("\n"), 1, 0);
+  return output;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -207,7 +209,7 @@ export default function (pi: ExtensionAPI) {
     }
 
     const defaultReason = `${event.toolName} was denied by the user`;
-    const reviewInEditor = async (): Promise<Approval> => {
+    const reviewInEditor = async (): Promise<Approval | undefined> => {
       const targetPath = resolveToolPath(input.path, ctx.cwd);
 
       const review = event.toolName === "edit"
@@ -216,17 +218,20 @@ export default function (pi: ExtensionAPI) {
       const comments = await reviewChange(pi, review, ctx.signal);
       const reviewDetails = comments ? parseReview(comments) : undefined;
 
-      if (reviewDetails) {
-        const language = getLanguageFromPath(targetPath);
-        pi.sendMessage({
-          customType: "review",
-          content: comments ?? "",
-          details: language
-            ? { comments: reviewDetails, language }
-            : { comments: reviewDetails },
-          display: true,
-        });
+      if (!reviewDetails) {
+        // No review comments means we should just return to the approvial tui
+        return undefined
       }
+
+      const language = getLanguageFromPath(targetPath);
+      pi.sendMessage({
+        customType: "review",
+        content: comments ?? "",
+        details: language
+          ? { comments: reviewDetails, language }
+          : { comments: reviewDetails },
+        display: true,
+      });
 
       return {
         approved: false,

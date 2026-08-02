@@ -13,7 +13,7 @@ export type Approval = { approved: true } | { approved: false; reason: string };
 export type ApprovalShortcut = {
   key: KeyId;
   display: string;
-  onSelect: () => Approval | Promise<Approval>;
+  onSelect: () => Approval | undefined | Promise<Approval | undefined>;
 };
 
 export async function approval(
@@ -88,12 +88,21 @@ export async function approval(
 
         const shortcut = shortcuts.find((item) => matchesKey(data, item.key));
         if (shortcut) {
-          void Promise.resolve(shortcut.onSelect()).then(done).catch((error: unknown) => {
-            done({
-              approved: false,
-              reason: error instanceof Error ? error.message : defaultReason,
-            });
-          });
+          void (async () => {
+            try {
+              const result = await shortcut.onSelect();
+              if (result) {
+                done(result);
+              } else {
+                tui.requestRender();
+              }
+            } catch (error: unknown) {
+              done({
+                approved: false,
+                reason: error instanceof Error ? error.message : defaultReason,
+              });
+            }
+          })();
           return;
         }
 
