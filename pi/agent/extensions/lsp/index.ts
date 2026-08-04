@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { extname, relative, resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   EditToolInput,
@@ -128,13 +128,18 @@ export default function (pi: ExtensionAPI) {
 
     const input = event.input as EditToolInput | ReadToolInput | WriteToolInput;
 
-    const path = input.path;
+    const path = input.path.replace(/^@/, "");
+    const file = resolve(ctx.cwd, path);
+    if (!isWithinDirectory(file, ctx.cwd)) {
+      ctx.ui.notify(`Not starting lsp, file ${file} is outside of the current working directory`, "info");
+      return undefined;
+    }
+
     const language = languageByExtension[extname(path).toLowerCase()];
     if (!language) {
       return undefined;
     }
 
-    const file = resolve(ctx.cwd, path.replace(/^@/, ""));
     void syncFile(language, file, ctx.cwd, ctx).catch((error) => {
       ctx.ui.notify(
         error instanceof Error ? error.message : String(error),
@@ -228,6 +233,14 @@ export default function (pi: ExtensionAPI) {
   }
 }
 
+
+function isWithinDirectory(file: string, directory: string): boolean {
+  const relativePath = relative(resolve(directory), resolve(file));
+  return relativePath === "" ||
+    (relativePath !== ".." &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath));
+}
 
 function formatDiagnostic(diagnostic: Diagnostic): string {
   const line = diagnostic.range.start.line + 1;
