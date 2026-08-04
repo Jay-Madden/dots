@@ -130,13 +130,14 @@ export default function (pi: ExtensionAPI) {
 
     const path = input.path.replace(/^@/, "");
     const file = resolve(ctx.cwd, path);
-    if (!isWithinDirectory(file, ctx.cwd)) {
-      ctx.ui.notify(`Not starting lsp, file ${file} is outside of the current working directory`, "info");
-      return undefined;
-    }
 
     const language = languageByExtension[extname(path).toLowerCase()];
     if (!language) {
+      return undefined;
+    }
+
+    if (!isWithinDirectory(file, ctx.cwd)) {
+      ctx.ui.notify(`Not starting lsp, file ${file} is outside of the current working directory`, "info");
       return undefined;
     }
 
