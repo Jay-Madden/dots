@@ -109,6 +109,45 @@ const allowedCommands = new Set<AllowedCommand>([
     ]),
   },
   {
+    name: "cargo",
+    allowedCommands: new Set([
+      { name: "-V" },
+      { name: "--version" },
+      { name: "--list" },
+      { name: "--explain" },
+      { name: "-h" },
+      { name: "--help" },
+      { name: "version" },
+      { name: "help" },
+      { name: "info" },
+      { name: "locate-project" },
+      {
+        name: "metadata",
+        blockedCommands: new Set(["--lockfile-path"]),
+      },
+      {
+        name: "tree",
+        blockedCommands: new Set(["--lockfile-path"]),
+      },
+      { name: "pkgid" },
+      { name: "read-manifest" },
+      { name: "search" },
+      {
+        name: "report",
+        allowedCommands: new Set([
+          { name: "future-incompat" },
+        ]),
+      },
+      { name: "verify-project" },
+      {
+        name: "config",
+        allowedCommands: new Set([
+          { name: "get" },
+        ]),
+      },
+    ]),
+  },
+  {
     name: "git",
     allowedCommands: new Set([
       { name: "status" },
