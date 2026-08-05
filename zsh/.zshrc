@@ -195,58 +195,6 @@ alias cdi='zi'
 alias lg='lazygit'
 alias cursor='cursor-agent'
 
-# Zellij tab name
-function current_dir() {
-    local current_dir=$PWD
-    if [[ $current_dir == $HOME ]]; then
-        current_dir="~"
-    else
-        current_dir=${current_dir##*/}
-    fi
-    if (( ${#current_dir} > 15 )); then
-        current_dir="${current_dir[1,12]}..."
-    fi
-    echo $current_dir
-}
-
-function change_tab_title() {
-    local process=${1:t}
-    local directory=$(current_dir)
-    local title=$directory
-
-    if [[ -n $process ]]; then
-        local process_max=$((20 - ${#directory} - 1))
-        if (( ${#process} > process_max )); then
-            if (( process_max > 3 )); then
-                process="${process[1,$((process_max - 3))]}..."
-            else
-                process=${process[1,$process_max]}
-            fi
-        fi
-        title="$process:$directory"
-    fi
-
-    command zellij action rename-tab "$title" >/dev/null 2>&1
-}
-
-function set_tab_to_working_dir() {
-    local result=$?
-    change_tab_title
-}
-
-function set_tab_to_command_line() {
-    local cmdline=$1
-    local program=${cmdline%% *}
-    change_tab_title "$program"
-}
-
-if [[ -n $ZELLIJ ]]; then
-    autoload -U add-zsh-hook
-    add-zsh-hook precmd set_tab_to_working_dir
-    add-zsh-hook preexec set_tab_to_command_line
-fi
-
-
 # neovim aliases
 alias ovim='/usr/bin/vim'
 vim() {
@@ -343,6 +291,17 @@ source <(kubectl completion zsh)
 alias cs="export KUBECONFIG=\$(fd '.*' $HOME/.kube/configs/* | tv --ui-scale 40)"
 
 alias zt="$HOME/.config/zellij/zt"
+
+TARGET="wasm32-wasip1"
+if ! rustup target list --installed | grep -q "^$TARGET$"; then
+    rustup target add "$TARGET"
+fi
+
+DYN_TAB_WASM="$HOME/.config/zellij/plugins/dyn-tab/target/wasm32-wasip1/release/dyn-tab.wasm"
+if [[ ! -f "$DYN_TAB_WASM" ]]; then
+    cargo build --release --target wasm32-wasip1 --manifest-path "$HOME/.config/zellij/plugins/dyn-tab/Cargo.toml"
+fi
+unset DYN_TAB_WASM
 
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 

@@ -1,0 +1,18 @@
+[package]
+name = "dyn-tab"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+unicode-width = "0.2.2"
+zellij-tile = "0.44.3"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
