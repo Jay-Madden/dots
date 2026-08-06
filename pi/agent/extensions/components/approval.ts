@@ -30,6 +30,11 @@ export async function approval(
       : { approved: false, reason: defaultReason };
   }
 
+  // Send a Zellij notification when an approval needs attention.
+  if (process.env.ZELLIJ !== undefined) {
+    process.stdout.write("\x07");
+  }
+
   return ctx.ui.custom<Approval>((tui, theme, keybindings, done) => {
     let selected: "yes" | "no" = "yes";
     let feedbackMode = false;

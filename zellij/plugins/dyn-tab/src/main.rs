@@ -43,7 +43,7 @@ impl ZellijPlugin for TabBar {
                 self.set_tabs(tabs);
                 true
             }
-            Event::PaneUpdate(manifest) => self.load_pane_cwds(&manifest),
+            Event::PaneUpdate(manifest) => self.load_pane_contexts(&manifest),
             Event::CommandChanged(pane_id, command, is_foreground, focused_clients) => {
                 if focused_clients.is_empty() {
                     return false;
@@ -149,7 +149,7 @@ impl TabBar {
         self.tabs = tabs;
     }
 
-    fn load_pane_cwds(&mut self, manifest: &PaneManifest) -> bool {
+    fn load_pane_contexts(&mut self, manifest: &PaneManifest) -> bool {
         let mut changed = false;
 
         for (tab_position, panes) in &manifest.panes {
@@ -162,11 +162,34 @@ impl TabBar {
                 if let Ok(cwd) = get_pane_cwd(pane_id) {
                     changed = self.set_cwd(*tab_position, &cwd) || changed;
                 }
+                if let Ok(command) = get_pane_running_command(pane_id) {
+                    let is_foreground = !self.is_shell_command(&command);
+                    changed = self.set_running_process(
+                        *tab_position,
+                        &command,
+                        is_foreground,
+                    ) || changed;
+                }
                 break;
             }
         }
 
         changed
+    }
+
+    fn is_shell_command(&self, command: &[String]) -> bool {
+        let Some(process) = process_name(command) else {
+            return false;
+        };
+
+        // Compare filenames so "/bin/zsh" matches "zsh".
+        self.mode_info
+            .as_ref()
+            .and_then(|mode_info| mode_info.shell.as_ref())
+            .and_then(|shell| shell.file_name())
+            .and_then(|shell| shell.to_str())
+            .map(|shell| shell == process)
+            .unwrap_or(false)
     }
 
     fn set_running_process(
