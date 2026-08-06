@@ -197,6 +197,13 @@ const allowedCommands = new Set<AllowedCommand>([
           { name: "diff", blockedCommands: new Set(["--web"]) },
         ]),
       },
+      {
+        name: "issue",
+        allowedCommands: new Set([
+          { name: "list" },
+          { name: "view", blockedCommands: new Set(["--web", "-w"]) },
+        ]),
+      },
     ]),
   },
   ...(await loadLocalAllowedCommands()),

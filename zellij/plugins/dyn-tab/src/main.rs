@@ -35,19 +35,15 @@ impl ZellijPlugin for TabBar {
     fn update(&mut self, event: Event) -> bool {
         match event {
             Event::ModeUpdate(mode_info) => {
-                let should_render = self.mode_info.as_ref() != Some(&mode_info);
                 self.mode_info = Some(mode_info);
-                should_render
+                true
             }
             Event::TabUpdate(tabs) => {
                 self.set_tabs(tabs);
                 true
             }
             Event::PaneUpdate(manifest) => self.load_pane_contexts(&manifest),
-            Event::CommandChanged(pane_id, command, is_foreground, focused_clients) => {
-                if focused_clients.is_empty() {
-                    return false;
-                }
+            Event::CommandChanged(pane_id, command, is_foreground, _) => {
                 let Ok((tab_idx, focused_pane_id)) = get_focused_pane_info() else {
                     return false;
                 };
@@ -56,10 +52,7 @@ impl ZellijPlugin for TabBar {
                 }
                 self.set_running_process(tab_idx, &command, is_foreground)
             }
-            Event::CwdChanged(pane_id, cwd, focused_clients) => {
-                if focused_clients.is_empty() {
-                    return false;
-                }
+            Event::CwdChanged(pane_id, cwd, _) => {
                 let Ok((tab_idx, focused_pane_id)) = get_focused_pane_info() else {
                     return false;
                 };
@@ -238,10 +231,6 @@ impl TabBar {
 
         if label.is_empty() {
             label.push_str("Tab");
-        }
-
-        if tab.has_bell_notification || tab.is_flashing_bell {
-            label.push('!');
         }
 
         label

@@ -303,6 +303,10 @@ if [[ ! -f "$DYN_TAB_WASM" ]]; then
 fi
 unset DYN_TAB_WASM
 
+if [[ -n "$ZELLIJ" ]]; then
+    zellij action start-or-reload-plugin "dyn-tab"
+fi
+
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
 if type eza >/dev/null 2>&1; then
