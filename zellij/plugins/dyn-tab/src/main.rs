@@ -1,26 +1,44 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use zellij_tile::prelude::*;
+
+#[derive(Default, Debug)]
+struct ViewPane {
+    pane: PaneInfo,
+    cwd: String,
+    process: String,
+}
+
+#[derive(Default, Debug)]
+struct ViewTab {
+    tab: TabInfo,
+    col: usize,
+    width: usize,
+    panes: Vec<ViewPane>,
+}
 
 #[derive(Default)]
 struct TabBar {
     mode_info: Option<ModeInfo>,
-    tabs: Vec<TabInfo>,
-    hitboxes: Vec<(usize, usize, usize)>,
-    tab_processes: HashMap<usize, String>,
-    tab_cwds: HashMap<usize, String>,
+    tabs: Vec<ViewTab>,
+    plugin_id: u32,
+    client_id: ClientId,
 }
 
 register_plugin!(TabBar);
 
 impl ZellijPlugin for TabBar {
     fn load(&mut self, _configuration: std::collections::BTreeMap<String, String>) {
+        let ids = get_plugin_ids();
+        self.plugin_id = ids.plugin_id;
+        self.client_id = ids.client_id;
+
+        // This needs to be true on initial load so the permission prompt can be accepted
         set_selectable(true);
+
         subscribe(&[
             EventType::ModeUpdate,
-            EventType::TabUpdate,
-            EventType::PaneUpdate,
+            EventType::SessionUpdate,
             EventType::CommandChanged,
             EventType::CwdChanged,
             EventType::Mouse,
@@ -38,37 +56,56 @@ impl ZellijPlugin for TabBar {
                 self.mode_info = Some(mode_info);
                 true
             }
-            Event::TabUpdate(tabs) => {
-                self.set_tabs(tabs);
+            Event::SessionUpdate(sessions, _) => {
+                // eprintln!("SessionUpdate recieved: ",);
+                let Some(session) = sessions
+                    .into_iter()
+                    .find(|session| session.is_current_session)
+                else {
+                    return false;
+                };
+
+                eprintln!("SessionUpdate for current session recieved: ");
+
+                self.set_state_from_session(session);
                 true
             }
-            Event::PaneUpdate(manifest) => self.load_pane_contexts(&manifest),
             Event::CommandChanged(pane_id, command, is_foreground, _) => {
-                let Ok((tab_idx, focused_pane_id)) = get_focused_pane_info() else {
+                let process = if is_foreground && !self.is_shell_command(&command) {
+                    process_name(&command).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                let Some(view_pane) = self.get_view_pane_mut(pane_id) else {
                     return false;
                 };
-                if pane_id != focused_pane_id {
-                    return false;
-                }
-                self.set_running_process(tab_idx, &command, is_foreground)
+                let changed = view_pane.process != process;
+                view_pane.process = process;
+
+                changed && view_pane.pane.is_focused
             }
             Event::CwdChanged(pane_id, cwd, _) => {
-                let Ok((tab_idx, focused_pane_id)) = get_focused_pane_info() else {
+                let Some(view_pane) = self.get_view_pane_mut(pane_id) else {
                     return false;
                 };
-                if pane_id != focused_pane_id {
-                    return false;
-                }
-                self.set_cwd(tab_idx, &cwd)
+
+                let cwd = cwd
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| cwd.to_string_lossy().into_owned());
+
+                let changed = view_pane.cwd != cwd;
+                view_pane.cwd = cwd;
+
+                changed && view_pane.pane.is_focused
             }
             Event::PermissionRequestResult(PermissionStatus::Granted) => {
                 set_selectable(false);
-                self.load_existing_tabs();
-                true
+                false
             }
             Event::Mouse(Mouse::LeftClick(_, column)) => {
                 if let Some(tab_position) = self.tab_at(column) {
-                    go_to_tab((tab_position + 1) as u32);
+                    go_to_tab(tab_position);
                 }
                 false
             }
@@ -81,22 +118,21 @@ impl ZellijPlugin for TabBar {
             return;
         }
 
-        self.hitboxes.clear();
         let mut output = String::new();
         let mut used = 0;
 
         if let Some(mode_info) = &self.mode_info {
-            let label = truncate_to_width(
-                &format!(" {:?} ", mode_info.mode).to_uppercase(),
-                cols,
-            );
+            let label = truncate_to_width(&format!(" {:?} ", mode_info.mode).to_uppercase(), cols);
             let width = UnicodeWidthStr::width(label.as_str());
             output.push_str(&serialize_text(&mode_text(mode_info, label)));
             used += width;
+        } else {
+            output.push_str(&serialize_text(&Text::new("Unknown").opaque()));
         }
 
-        for tab in &self.tabs {
+        for tab_view in &mut self.tabs {
             if used >= cols {
+                eprintln!("No more space for tabs, used: {used}, cols: {cols}");
                 break;
             }
 
@@ -104,70 +140,154 @@ impl ZellijPlugin for TabBar {
             const ARROW_PADDING: usize = 4;
 
             let available_width = cols.saturating_sub(used + ARROW_PADDING);
-            let label = truncate_to_width(&self.tab_label(tab), available_width);
+            let label = tab_label(tab_view);
+            let label = truncate_to_width(label.as_str(), available_width);
             let label_width = UnicodeWidthStr::width(label.as_str());
             if label_width == 0 {
                 break;
             }
             let width = label_width + ARROW_PADDING;
 
-            output.push_str(&serialize_ribbon(&tab_text(tab, label)));
-            self.hitboxes.push((used, used + width, tab.position));
+            tab_view.col = used;
+            tab_view.width = width;
+
+            // The session event is global so we need to make sure the current tab is also active
+            // with the currently attached client
+            let active = tab_view
+                .tab
+                .other_focused_clients
+                .contains(&self.client_id);
+
+            output.push_str(&serialize_ribbon(&tab_text(
+                &tab_view.tab,
+                active,
+                label,
+            )));
             used += width;
         }
 
         if used < cols {
-            output.push_str(&serialize_text(&Text::new(" ".repeat(cols - used)).opaque()));
+            output.push_str(&serialize_text(
+                &Text::new(" ".repeat(cols - used)).opaque(),
+            ));
         }
 
+        eprintln!("Rendered tab bar: {output}");
         print!("{output}");
     }
 }
 
 impl TabBar {
-    fn load_existing_tabs(&mut self) {
-        let Ok(snapshot) = get_session_list() else { return };
+    fn set_state_from_session(&mut self, mut session: SessionInfo) {
+        // If the plugin pane is the only one left in the tab then its been closed
+        // and we should kill ourselves
+        let should_destroy_self = session.tabs.iter().any(|tab| {
+            let panes = session
+                .panes
+                .panes
+                .get(&tab.position)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let contains_self = panes
+                .iter()
+                .any(|pane| pane.is_plugin && pane.id == self.plugin_id);
+            let has_terminal = panes
+                .iter()
+                .any(|pane| !pane.is_plugin && !pane.is_suppressed);
 
-        if let Some(session) = snapshot
-            .live_sessions
+            contains_self && !has_terminal
+        });
+
+        if should_destroy_self {
+            close_self();
+            return;
+        }
+
+        // Keep tabs in their current display order.
+        session.tabs.sort_by_key(|tab| tab.position);
+
+        // Cache the shell name so initial process lookups can exclude it.
+        let shell = self.shell_name();
+
+        // Index existing tabs so their cached view state survives updates.
+        let mut cached_tabs: HashMap<usize, ViewTab> = std::mem::take(&mut self.tabs)
             .into_iter()
-            .find(|session| session.is_current_session)
-        {
-            self.set_tabs(session.tabs);
-        }
+            .map(|tab| (tab.tab.tab_id, tab))
+            .collect();
+
+        // Rebuild the visible tabs from the latest session snapshot.
+        self.tabs = session
+            .tabs
+            .into_iter()
+            .map(|session_tab| {
+                // Reuse the cached tab when its id is still there
+                let mut view_tab = cached_tabs.remove(&session_tab.tab_id).unwrap_or_default();
+
+                // Index terminal panes so their cached state survives updates
+                let mut cached_panes: HashMap<PaneId, ViewPane> =
+                    std::mem::take(&mut view_tab.panes)
+                        .into_iter()
+                        .map(|pane| (PaneId::Terminal(pane.pane.id), pane))
+                        .collect();
+
+                // Rebuild terminal panes
+                view_tab.panes = session
+                    .panes
+                    .panes
+                    .get(&session_tab.position)
+                    .into_iter()
+                    .flatten()
+                    .filter(|pane| !pane.is_plugin)
+                    .cloned()
+                    .map(|pane| {
+                        // Reuse cached per-pane state or initialize it from the server.
+                        let pane_id = PaneId::Terminal(pane.id);
+                        let mut view_pane = cached_panes.remove(&pane_id).unwrap_or_else(|| {
+                            // Load the panes cwd only if weve never seen it before (initial load)
+                            let cwd = get_pane_cwd(pane_id)
+                                .ok()
+                                .and_then(|cwd| {
+                                    cwd.file_name()
+                                        .map(|name| name.to_string_lossy().into_owned())
+                                })
+                                .unwrap_or_default();
+
+                            // Load the process only if we have never seen the pane before.
+                            let process = if let Some(shell) = shell.as_deref() {
+                                get_pane_running_command(pane_id)
+                                    .ok()
+                                    .and_then(|command| process_name(&command))
+                                    .filter(|process| process != shell)
+                                    .unwrap_or_default()
+                            } else {
+                                String::new()
+                            };
+
+                            ViewPane {
+                                cwd,
+                                process,
+                                ..Default::default()
+                            }
+                        });
+                        view_pane.pane = pane;
+                        view_pane
+                    })
+                    .collect();
+
+                // Refresh tab metadata while retaining view state
+                view_tab.tab = session_tab;
+                view_tab
+            })
+            .collect();
     }
 
-    fn set_tabs(&mut self, mut tabs: Vec<TabInfo>) {
-        tabs.sort_by_key(|tab| tab.position);
-        self.tabs = tabs;
-    }
-
-    fn load_pane_contexts(&mut self, manifest: &PaneManifest) -> bool {
-        let mut changed = false;
-
-        for (tab_position, panes) in &manifest.panes {
-            for pane in panes {
-                if !pane.is_focused || pane.is_plugin {
-                    continue;
-                }
-
-                let pane_id = PaneId::Terminal(pane.id);
-                if let Ok(cwd) = get_pane_cwd(pane_id) {
-                    changed = self.set_cwd(*tab_position, &cwd) || changed;
-                }
-                if let Ok(command) = get_pane_running_command(pane_id) {
-                    let is_foreground = !self.is_shell_command(&command);
-                    changed = self.set_running_process(
-                        *tab_position,
-                        &command,
-                        is_foreground,
-                    ) || changed;
-                }
-                break;
-            }
-        }
-
-        changed
+    fn shell_name(&self) -> Option<String> {
+        self.mode_info
+            .as_ref()
+            .and_then(|mode_info| mode_info.shell.as_ref())
+            .and_then(|shell| shell.file_name())
+            .and_then(|shell| shell.to_str())
+            .map(str::to_owned)
     }
 
     fn is_shell_command(&self, command: &[String]) -> bool {
@@ -175,72 +295,40 @@ impl TabBar {
             return false;
         };
 
-        // Compare filenames so "/bin/zsh" matches "zsh".
-        self.mode_info
-            .as_ref()
-            .and_then(|mode_info| mode_info.shell.as_ref())
-            .and_then(|shell| shell.file_name())
-            .and_then(|shell| shell.to_str())
-            .map(|shell| shell == process)
-            .unwrap_or(false)
+        self.shell_name().as_deref() == Some(process.as_str())
     }
 
-    fn set_running_process(
-        &mut self,
-        tab_position: usize,
-        command: &[String],
-        is_foreground: bool,
-    ) -> bool {
-        if !is_foreground {
-            return self.tab_processes.remove(&tab_position).is_some();
-        }
+    fn get_view_pane_mut(&mut self, pane_id: PaneId) -> Option<&mut ViewPane> {
+        self.tabs
+            .iter_mut()
+            .flat_map(|tab| tab.panes.iter_mut())
+            .find(|pane| PaneId::Terminal(pane.pane.id) == pane_id)
+    }
 
-        match process_name(command) {
-            Some(process) => {
-                let changed = self.tab_processes.get(&tab_position) != Some(&process);
-                self.tab_processes.insert(tab_position, process);
-                changed
+    fn tab_at(&self, idx: usize) -> Option<u32> {
+        for tab_view in &self.tabs {
+            if idx >= tab_view.col && idx < tab_view.col + tab_view.width {
+                return Some(tab_view.tab.position as u32);
             }
-            None => false,
         }
+        None
     }
+}
 
-    fn set_cwd(&mut self, tab_position: usize, cwd: &Path) -> bool {
-        let cwd = cwd
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned());
-        match cwd {
-            Some(cwd) => {
-                let changed = self.tab_cwds.get(&tab_position) != Some(&cwd);
-                self.tab_cwds.insert(tab_position, cwd);
-                changed
-            }
-            None => self.tab_cwds.remove(&tab_position).is_some(),
-        }
-    }
+fn tab_label(tab: &ViewTab) -> String {
+    let Some(pane) = tab.panes.iter().find(|pane| pane.pane.is_focused) else {
+        return tab.tab.name.clone();
+    };
+    let label = [pane.process.as_str(), pane.cwd.as_str()]
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join(":");
 
-    fn tab_label(&self, tab: &TabInfo) -> String {
-        let process = self.tab_processes.get(&tab.position).map(String::as_str);
-        let cwd = self.tab_cwds.get(&tab.position).map(String::as_str);
-        let name = (!tab.name.is_empty()).then_some(tab.name.as_str());
-        let mut label = [process, cwd.or(name)]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(":");
-
-        if label.is_empty() {
-            label.push_str("Tab");
-        }
-
+    if label.is_empty() {
+        tab.tab.name.clone()
+    } else {
         label
-    }
-
-    fn tab_at(&self, column: usize) -> Option<usize> {
-        self.hitboxes
-            .iter()
-            .find(|(start, end, _)| column >= *start && column < *end)
-            .map(|(_, _, position)| *position)
     }
 }
 
@@ -260,12 +348,12 @@ fn mode_text(mode_info: &ModeInfo, label: String) -> Text {
     }
 }
 
-fn tab_text(tab: &TabInfo, label: String) -> Text {
+fn tab_text(tab: &TabInfo, active: bool, label: String) -> Text {
     let text = Text::new(label);
 
     if tab.has_bell_notification || tab.is_flashing_bell {
         text.opaque().error_color_all()
-    } else if tab.active {
+    } else if active {
         text.selected()
     } else {
         text.opaque()

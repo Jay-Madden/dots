@@ -302,7 +302,6 @@ plugins {
 // eg. "https://example.com/my-plugin.wasm"
 load_plugins {
     zellij:link
-    "file:.config/zellij/plugins/dyn-tab/target/wasm32-wasip1/release/dyn-tab.wasm"
 }
 web_client {
     font "monospace"
