@@ -6,6 +6,7 @@ import {
   createEditToolDefinition,
   getLanguageFromPath,
   getMarkdownTheme,
+  isToolCallEventType,
   type EditToolInput,
   type ExtensionAPI,
   type ExtensionContext,
@@ -202,26 +203,30 @@ export default function (pi: ExtensionAPI) {
   );
 
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName !== "edit" && event.toolName !== "write") {
+    const toolCall = isToolCallEventType<"edit", EditToolInput>("edit", event)
+      ? { toolName: "edit" as const, input: event.input }
+      : isToolCallEventType<"write", WriteToolInput>("write", event)
+        ? { toolName: "write" as const, input: event.input }
+        : undefined;
+    if (!toolCall) {
       return undefined;
     }
 
-    const input = event.input as EditToolInput | WriteToolInput;
-    if (event.toolName === "edit") {
-      const error = await validateEdit(input as EditToolInput, ctx.cwd);
+    if (toolCall.toolName === "edit") {
+      const error = await validateEdit(toolCall.input, ctx.cwd);
       if (error) {
         ctx.ui.notify("Edit validation failed: allowing tool call through to standard validator", "warning");
         return undefined;
       }
     }
 
-    const defaultReason = `${event.toolName} was denied by the user`;
+    const defaultReason = `${toolCall.toolName} was denied by the user`;
     const reviewInEditor = async (): Promise<Approval | undefined> => {
-      const targetPath = resolveToolPath(input.path, ctx.cwd);
+      const targetPath = resolveToolPath(toolCall.input.path, ctx.cwd);
 
-      const review = event.toolName === "edit"
-        ? await createEditReview(input as EditToolInput, targetPath, ctx)
-        : await createReview(targetPath, await readContent(targetPath), (input as WriteToolInput).content);
+      const review = toolCall.toolName === "edit"
+        ? await createEditReview(toolCall.input, targetPath, ctx)
+        : await createReview(targetPath, await readContent(targetPath), toolCall.input.content);
       const comments = await reviewChange(pi, review, ctx.signal);
       const reviewDetails = comments ? parseReview(comments) : undefined;
 
@@ -248,8 +253,8 @@ export default function (pi: ExtensionAPI) {
 
     const approvalResult = await approval(
       ctx,
-      ctx.ui.theme.fg("accent", ctx.ui.theme.bold(`Approve ${event.toolName}?`)),
-      ctx.ui.theme.fg("muted", input.path),
+      ctx.ui.theme.fg("accent", ctx.ui.theme.bold(`Approve ${toolCall.toolName}?`)),
+      ctx.ui.theme.fg("muted", toolCall.input.path),
       defaultReason,
       [{
         key: Key.ctrl("r"),

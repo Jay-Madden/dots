@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
   highlightCode,
+  isToolCallEventType,
   keyHint,
+  type BashToolInput,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { approval } from "./components/approval.ts";
@@ -268,14 +270,11 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName !== "bash") {
+    if (!isToolCallEventType<"bash", BashToolInput>("bash", event)) {
       return undefined;
     }
 
-    const command = (event.input as { command?: unknown }).command;
-    if (typeof command !== "string") {
-      return undefined;
-    }
+    const { command } = event.input;
 
     const findings = getApprovalFindings(command);
     const blocked = [

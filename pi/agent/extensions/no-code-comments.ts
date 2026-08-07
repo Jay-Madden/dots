@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  isToolCallEventType,
+  type EditToolInput,
+  type ExtensionAPI,
+  type WriteToolInput,
+} from "@earendil-works/pi-coding-agent";
 import { approval } from "./components/approval.ts";
 
 const commentMarkersByExtension: Record<string, string[]> = {
@@ -21,27 +26,21 @@ const commentMarkersByExtension: Record<string, string[]> = {
 
 const emDash = "\u2014";
 
-type Edit = {
-  oldText: string;
-  newText: string;
-};
-
-type ToolInput = {
-  path: string;
-  content: string;
-  edits: Edit[];
-};
-
 export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName !== "edit" && event.toolName !== "write") {
+    const toolCall = isToolCallEventType<"edit", EditToolInput>("edit", event)
+      ? { toolName: "edit" as const, input: event.input }
+      : isToolCallEventType<"write", WriteToolInput>("write", event)
+        ? { toolName: "write" as const, input: event.input }
+        : undefined;
+    if (!toolCall) {
       return undefined;
     }
 
-    const input = event.input as ToolInput;
-    const path =
-      typeof input.path === "string" ? input.path.replace(/^@/, "") : "";
-    const changes = editsFor(event.toolName, input);
+    const path = toolCall.input.path.replace(/^@/, "");
+    const changes = toolCall.toolName === "write"
+      ? [{ oldText: "", newText: toolCall.input.content }]
+      : toolCall.input.edits;
     const emDashLines = changes.flatMap(({ newText }) =>
       linesContaining(newText, emDash),
     );
@@ -53,12 +52,12 @@ export default function (pi: ExtensionAPI) {
     const markers = commentMarkersByExtension[extname(path).toLowerCase()];
     if (markers) {
       const existingLines =
-        event.toolName === "write"
+        toolCall.toolName === "write"
           ? await readExistingLines(path, ctx.cwd)
           : new Set<string>();
       const addedComments = changes.flatMap(({ oldText, newText }) => {
         const priorLines =
-          event.toolName === "write"
+          toolCall.toolName === "write"
             ? existingLines
             : new Set(oldText.split(/\r?\n/));
         const priorComments = new Set(
@@ -100,12 +99,6 @@ export default function (pi: ExtensionAPI) {
 
     return undefined;
   });
-}
-
-function editsFor(toolName: string, input: ToolInput): Edit[] {
-  return toolName === "write"
-    ? [{ oldText: "", newText: input.content }]
-    : input.edits;
 }
 
 function isCommentLine(line: string, markers: string[]): boolean {
