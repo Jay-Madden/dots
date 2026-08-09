@@ -198,6 +198,32 @@ function renderReview(
 }
 
 export default function (pi: ExtensionAPI) {
+  let approvalsDisabled = false;
+  const setApprovalStatus = (ctx: ExtensionContext) => {
+    ctx.ui.setStatus("auto-write", `auto-write: ${approvalsDisabled}`);
+  }
+
+  const toggleApprovals = (ctx: ExtensionContext) => {
+    approvalsDisabled = !approvalsDisabled;
+    setApprovalStatus(ctx);
+    ctx.ui.notify(
+      `Write and edit approvals disabled: ${ctx.ui.theme.fg("toolTitle", String(approvalsDisabled))}`,
+      "info",
+    );
+  };
+
+  pi.on("session_start", (_event, ctx) => {
+    approvalsDisabled = false;
+    setApprovalStatus(ctx);
+  });
+
+  pi.registerShortcut(Key.ctrl("a"), {
+    description: "Disable write and edit approvals",
+    handler: (ctx) => {
+      toggleApprovals(ctx);
+    },
+  });
+
   pi.registerMessageRenderer<ReviewDetails>("review", (message, _options, theme) =>
     renderReview(message.details?.comments ?? [], message.details?.language, theme),
   );
@@ -208,7 +234,8 @@ export default function (pi: ExtensionAPI) {
       : isToolCallEventType<"write", WriteToolInput>("write", event)
         ? { toolName: "write" as const, input: event.input }
         : undefined;
-    if (!toolCall) {
+
+    if (!toolCall || approvalsDisabled) {
       return undefined;
     }
 
@@ -256,11 +283,21 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.theme.fg("accent", ctx.ui.theme.bold(`Approve ${toolCall.toolName}?`)),
       ctx.ui.theme.fg("muted", toolCall.input.path),
       defaultReason,
-      [{
-        key: Key.ctrl("r"),
-        display: "review in editor",
-        onSelect: reviewInEditor,
-      }],
+      [
+        {
+          key: Key.ctrl("a"),
+          display: "disable approvals",
+          onSelect: () => {
+            toggleApprovals(ctx);
+            return { approved: true };
+          },
+        },
+        {
+          key: Key.ctrl("r"),
+          display: "review in editor",
+          onSelect: reviewInEditor,
+        },
+      ],
     );
     if (approvalResult.approved) {
       return undefined;
