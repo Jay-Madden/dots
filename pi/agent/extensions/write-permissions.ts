@@ -200,7 +200,7 @@ function renderReview(
 export default function (pi: ExtensionAPI) {
   let approvalsDisabled = false;
   const setApprovalStatus = (ctx: ExtensionContext) => {
-    ctx.ui.setStatus("auto-write", `auto-write: ${approvalsDisabled}`);
+    ctx.ui.setStatus("auto-write", `auto-write:${approvalsDisabled}`);
   }
 
   const toggleApprovals = (ctx: ExtensionContext) => {

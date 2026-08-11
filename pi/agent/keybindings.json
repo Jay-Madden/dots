@@ -1,0 +1,5 @@
+{
+  "tui.editor.cursorLineStart": ["home", "ctrl+home"],
+  "app.models.enableAll": [],
+  "app.tree.filter.all": "ctrl+shift+a"
+}
