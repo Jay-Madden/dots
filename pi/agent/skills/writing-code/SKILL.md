@@ -13,6 +13,9 @@ user-invocable: false
 - This applies even when copy-pasting text from elsewhere: convert non-ASCII to ASCII equivalents before writing it.
 - This applies even when the surrounding file already contains non-ASCII characters: do not propagate them.
 
+## Proposing Patches
+- All proposed/attempted diffs that do not have an associated explanation about what their purpose is should have a SHORT and SUCCINT explanation emitted before the patch is proposed.
+
 ## Tests
 
 - Do NOT, under any circumstances ever write unit tests unless absolutely explicitly asked for no matter how much you think they are needed. They are not, they are slop shit.
