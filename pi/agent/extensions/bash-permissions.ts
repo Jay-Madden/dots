@@ -206,6 +206,12 @@ const allowedCommands = new Set<AllowedCommand>([
           { name: "view", blockedCommands: new Set(["--web", "-w"]) },
         ]),
       },
+      {
+        name: "run",
+        allowedCommands: new Set([
+          { name: "view" },
+        ]),
+      },
     ]),
   },
   ...(await loadLocalAllowedCommands()),
