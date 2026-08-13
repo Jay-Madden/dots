@@ -2,6 +2,10 @@ use std::{collections::HashMap, path::Path};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use zellij_tile::prelude::*;
 
+const CWD_MAX_CHARS: usize = 16;
+const CWD_LEFT_CHARS: usize = 4;
+const CWD_RIGHT_CHARS: usize = 2;
+
 #[derive(Default, Debug)]
 struct ViewPane {
     pane: PaneInfo,
@@ -93,6 +97,7 @@ impl ZellijPlugin for TabBar {
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_else(|| cwd.to_string_lossy().into_owned());
+                let cwd = truncate_cwd(&cwd);
 
                 let changed = view_pane.cwd != cwd;
                 view_pane.cwd = cwd;
@@ -250,6 +255,7 @@ impl TabBar {
                                     cwd.file_name()
                                         .map(|name| name.to_string_lossy().into_owned())
                                 })
+                                .map(|cwd| truncate_cwd(&cwd))
                                 .unwrap_or_default();
 
                             // Load the process only if we have never seen the pane before.
@@ -366,6 +372,20 @@ fn process_name(command: &[String]) -> Option<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_owned)
+}
+
+fn truncate_cwd(value: &str) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    if chars.len() <= CWD_MAX_CHARS {
+        return value.to_owned();
+    }
+
+    let left = chars.iter().take(CWD_LEFT_CHARS).collect::<String>();
+    let right = chars
+        .iter()
+        .skip(chars.len().saturating_sub(CWD_RIGHT_CHARS))
+        .collect::<String>();
+    format!("{left}...{right}")
 }
 
 fn truncate_to_width(value: &str, max_width: usize) -> String {
