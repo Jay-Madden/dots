@@ -16,6 +16,7 @@ description: REQUIRED TO LOAD BEFORE RUNNING BASH COMMANDS. Rules for constructi
 ## Command construction
 
 - **IMPORTANT** Prefer native Bash constructs for shell logic instead of embedding Python or Ruby programs in shell commands.
+- **IMPORTANT** Do not use any sort of construct to edit files, the built in edit tool should be preferred
 - Use Bash conditionals, loops, functions, parameter expansion, pipelines, and standard command-line tools when they are sufficient.
 - Prefer `jq` for reading, filtering, transforming, and validating JSON.
 - Prefer `rg` for searching text and locating files by content.
