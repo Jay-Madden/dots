@@ -75,8 +75,8 @@ impl ZellijPlugin for TabBar {
                 true
             }
             Event::CommandChanged(pane_id, command, is_foreground, _) => {
-                let process = if is_foreground && !self.is_shell_command(&command) {
-                    process_name(&command).unwrap_or_default()
+                let process = if is_foreground {
+                    visible_process_name(&command).unwrap_or_default()
                 } else {
                     String::new()
                 };
@@ -158,16 +158,9 @@ impl ZellijPlugin for TabBar {
 
             // The session event is global so we need to make sure the current tab is also active
             // with the currently attached client
-            let active = tab_view
-                .tab
-                .other_focused_clients
-                .contains(&self.client_id);
+            let active = tab_view.tab.other_focused_clients.contains(&self.client_id);
 
-            output.push_str(&serialize_ribbon(&tab_text(
-                &tab_view.tab,
-                active,
-                label,
-            )));
+            output.push_str(&serialize_ribbon(&tab_text(&tab_view.tab, active, label)));
             used += width;
         }
 
@@ -210,9 +203,6 @@ impl TabBar {
 
         // Keep tabs in their current display order.
         session.tabs.sort_by_key(|tab| tab.position);
-
-        // Cache the shell name so initial process lookups can exclude it.
-        let shell = self.shell_name();
 
         // Index existing tabs so their cached view state survives updates.
         let mut cached_tabs: HashMap<usize, ViewTab> = std::mem::take(&mut self.tabs)
@@ -259,15 +249,10 @@ impl TabBar {
                                 .unwrap_or_default();
 
                             // Load the process only if we have never seen the pane before.
-                            let process = if let Some(shell) = shell.as_deref() {
-                                get_pane_running_command(pane_id)
-                                    .ok()
-                                    .and_then(|command| process_name(&command))
-                                    .filter(|process| process != shell)
-                                    .unwrap_or_default()
-                            } else {
-                                String::new()
-                            };
+                            let process = get_pane_running_command(pane_id)
+                                .ok()
+                                .and_then(|command| visible_process_name(&command))
+                                .unwrap_or_default();
 
                             ViewPane {
                                 cwd,
@@ -285,23 +270,6 @@ impl TabBar {
                 view_tab
             })
             .collect();
-    }
-
-    fn shell_name(&self) -> Option<String> {
-        self.mode_info
-            .as_ref()
-            .and_then(|mode_info| mode_info.shell.as_ref())
-            .and_then(|shell| shell.file_name())
-            .and_then(|shell| shell.to_str())
-            .map(str::to_owned)
-    }
-
-    fn is_shell_command(&self, command: &[String]) -> bool {
-        let Some(process) = process_name(command) else {
-            return false;
-        };
-
-        self.shell_name().as_deref() == Some(process.as_str())
     }
 
     fn get_view_pane_mut(&mut self, pane_id: PaneId) -> Option<&mut ViewPane> {
@@ -372,6 +340,41 @@ fn process_name(command: &[String]) -> Option<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_owned)
+}
+
+fn visible_process_name(command: &[String]) -> Option<String> {
+    process_name(command).filter(|process| !is_common_shell(process))
+}
+
+fn is_common_shell(process: &str) -> bool {
+    const COMMON_SHELLS: &[&str] = &[
+        "bash",
+        "cmd",
+        "cmd.exe",
+        "csh",
+        "elvish",
+        "fish",
+        "mksh",
+        "nu",
+        "nushell",
+        "oil",
+        "osh",
+        "powershell",
+        "powershell.exe",
+        "pwsh",
+        "pwsh.exe",
+        "sh",
+        "tcsh",
+        "xonsh",
+        "yash",
+        "ysh",
+        "zsh",
+    ];
+    let process = process.strip_prefix('-').unwrap_or(process);
+
+    COMMON_SHELLS
+        .iter()
+        .any(|shell| process.eq_ignore_ascii_case(shell))
 }
 
 fn truncate_cwd(value: &str) -> String {
