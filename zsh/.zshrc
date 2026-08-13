@@ -193,7 +193,10 @@ alias python='python3'
 alias h='atuin history list'
 alias cdi='zi'
 alias lg='lazygit'
-alias cursor='cursor-agent'
+
+if [[ "$OSTYPE" == darwin* ]]; then
+    alias pwdc='pwd | pbcopy'
+fi
 
 # neovim aliases
 alias ovim='/usr/bin/vim'
