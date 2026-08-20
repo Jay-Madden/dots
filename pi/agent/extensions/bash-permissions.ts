@@ -189,6 +189,168 @@ const allowedCommands = new Set<AllowedCommand>([
     ]),
   },
   {
+    name: "fj",
+    allowedCommands: new Set([
+      { name: "-h" },
+      { name: "--help" },
+      { name: "help" },
+      { name: "whoami" },
+      { name: "version" },
+      { name: "completion" },
+      {
+        name: "repo",
+        allowedCommands: new Set([
+          { name: "view" },
+          { name: "readme" },
+          { name: "star-status" },
+          { name: "watch-status" },
+          {
+            name: "labels",
+            allowedCommands: new Set([
+              { name: "view" },
+            ]),
+          },
+        ]),
+      },
+      {
+        name: "issue",
+        allowedCommands: new Set([
+          { name: "search" },
+          { name: "view" },
+          { name: "templates" },
+        ]),
+      },
+      {
+        name: "pr",
+        allowedCommands: new Set([
+          { name: "search" },
+          { name: "view" },
+          { name: "status" },
+          {
+            name: "review",
+            allowedCommands: new Set([
+              { name: "list" },
+            ]),
+          },
+        ]),
+      },
+      {
+        name: "wiki",
+        allowedCommands: new Set([
+          { name: "contents" },
+          { name: "view" },
+        ]),
+      },
+      {
+        name: "actions",
+        allowedCommands: new Set([
+          { name: "tasks" },
+          {
+            name: "variables",
+            allowedCommands: new Set([
+              { name: "list" },
+            ]),
+          },
+          {
+            name: "secrets",
+            allowedCommands: new Set([
+              { name: "list" },
+            ]),
+          },
+        ]),
+      },
+      {
+        name: "auth",
+        allowedCommands: new Set([
+          { name: "list" },
+        ]),
+      },
+      {
+        name: "release",
+        allowedCommands: new Set([
+          { name: "list" },
+          { name: "view" },
+        ]),
+      },
+      {
+        name: "tag",
+        allowedCommands: new Set([
+          { name: "list" },
+          { name: "view" },
+        ]),
+      },
+      {
+        name: "user",
+        allowedCommands: new Set([
+          { name: "search" },
+          { name: "view" },
+          { name: "following" },
+          { name: "followers" },
+          { name: "repos" },
+          { name: "orgs" },
+          { name: "activity" },
+          {
+            name: "key",
+            allowedCommands: new Set([
+              { name: "list" },
+              { name: "view" },
+            ]),
+          },
+          {
+            name: "gpg",
+            allowedCommands: new Set([
+              { name: "list" },
+              { name: "view" },
+            ]),
+          },
+        ]),
+      },
+      {
+        name: "org",
+        allowedCommands: new Set([
+          { name: "list" },
+          { name: "view" },
+          { name: "members" },
+          {
+            name: "visibility",
+            blockedCommands: new Set(["-s", "--set"]),
+          },
+          {
+            name: "team",
+            allowedCommands: new Set([
+              { name: "list" },
+              { name: "view" },
+              {
+                name: "repo",
+                allowedCommands: new Set([
+                  { name: "list" },
+                ]),
+              },
+              {
+                name: "member",
+                allowedCommands: new Set([
+                  { name: "list" },
+                ]),
+              },
+            ]),
+          },
+          {
+            name: "label",
+            allowedCommands: new Set([
+              { name: "list" },
+            ]),
+          },
+          {
+            name: "repo",
+            allowedCommands: new Set([
+              { name: "list" },
+            ]),
+          },
+        ]),
+      },
+    ]),
+  },
+  {
     name: "gh",
     allowedCommands: new Set([
       {
