@@ -40,7 +40,7 @@
     "accent": "springViolet1",
     "border": "sumiInk6",
     "borderAccent": "springViolet2",
-    "borderMuted": "sumiInk5",
+    "borderMuted": "springViolet1",
     "success": "springGreen",
     "error": "samuraiRed",
     "warning": "roninYellow",

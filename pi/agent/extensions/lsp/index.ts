@@ -86,6 +86,13 @@ export default function (pi: ExtensionAPI) {
         details: { path, version },
       };
     },
+    renderCall(args, theme) {
+      return new Text(
+        `${theme.fg("accent", diagnosticsToolName)}\n${theme.fg("muted", args.path)}`,
+        0,
+        0,
+      );
+    },
   });
 
   const ensureClient = async (
