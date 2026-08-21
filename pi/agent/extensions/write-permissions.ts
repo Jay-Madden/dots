@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,6 +49,18 @@ async function readContent(path: string): Promise<string> {
     return await readFile(path, "utf8");
   } catch {
     return "";
+  }
+}
+
+async function validateWrite(input: WriteToolInput, cwd: string): Promise<string | undefined> {
+  try {
+    await lstat(resolveToolPath(input.path, cwd));
+    return `Cannot write "${input.path}": the target already exists. Use edit to modify existing files.`;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+    return error instanceof Error ? error.message : String(error);
   }
 }
 
@@ -235,7 +247,18 @@ export default function (pi: ExtensionAPI) {
         ? { toolName: "write" as const, input: event.input }
         : undefined;
 
-    if (!toolCall || approvalsDisabled) {
+    if (!toolCall) {
+      return undefined;
+    }
+
+    if (toolCall.toolName === "write") {
+      const error = await validateWrite(toolCall.input, ctx.cwd);
+      if (error) {
+        return { block: true, reason: error };
+      }
+    }
+
+    if (approvalsDisabled) {
       return undefined;
     }
 
