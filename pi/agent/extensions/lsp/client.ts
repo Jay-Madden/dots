@@ -55,8 +55,16 @@ export type LspClientOptions = {
 };
 
 export const commands: Record<LspLanguage, LspCommand> = {
-  javascript: { name: "vtsls", command: "vtsls", args: ["--stdio"] },
-  typescript: { name: "vtsls", command: "vtsls", args: ["--stdio"] },
+  javascript: {
+    name: "ts-ls",
+    command: "typescript-language-server",
+    args: ["--stdio"],
+  },
+  typescript: {
+    name: "ts-ls",
+    command: "typescript-language-server",
+    args: ["--stdio"],
+  },
   python: { name: "ty", command: "ty", args: ["server"] },
   go: { name: "gopls", command: "gopls", args: ["-remote=auto"] },
   rust: { name: "rust-analyzer", command: "rust-analyzer", args: [] },
