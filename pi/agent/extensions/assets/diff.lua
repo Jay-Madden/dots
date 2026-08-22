@@ -369,12 +369,16 @@ function M.setup()
     render_comments(bufnr)
   end
 
-  vim.api.nvim_create_user_command("DiffComment", function(opts)
+  local function add_comment_command(opts)
     M.add_comment(opts.args)
-  end, {
-    nargs = "+",
-    force = true,
-  })
+  end
+
+  for _, name in ipairs({ "DiffComment", "Dc", "DC" }) do
+    vim.api.nvim_create_user_command(name, add_comment_command, {
+      nargs = "+",
+      force = true,
+    })
+  end
 
   function M.delete_comment()
     local bufnr = vim.api.nvim_get_current_buf()
