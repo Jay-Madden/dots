@@ -107,9 +107,9 @@ local function render_comments(bufnr)
   vim.api.nvim_set_hl(0, "DiffCommentBorder", { fg = info.fg, bg = diff_add.bg })
 
   local comments = vim.b[bufnr].no_index_diff_comments or {}
-  local added_lines = vim.b[bufnr].no_index_diff_added_lines or {}
+  local changed_lines = vim.b[bufnr].no_index_diff_changed_lines or {}
   for line_number, text in pairs(comments) do
-    if added_lines[line_number] and text ~= vim.NIL then
+    if vim.tbl_contains(changed_lines, line_number) and text ~= vim.NIL then
       local horizontal = vim.fn.nr2char(0x2500)
       local vertical = vim.fn.nr2char(0x2502)
       local winid = vim.fn.bufwinid(bufnr)
@@ -181,6 +181,43 @@ local function write_comments()
     output_file = vim.fn.fnamemodify(file, ":h") .. "/.diff-comments.jsonl"
   end
   vim.fn.writefile(lines, output_file)
+end
+
+local function jump_to_changed_line(direction)
+  local changed_lines = vim.b.no_index_diff_changed_lines or {}
+  if #changed_lines == 0 then
+    return
+  end
+
+  local change_starts = {}
+  for index, line_number in ipairs(changed_lines) do
+    if index == 1 or line_number > changed_lines[index - 1] + 1 then
+      table.insert(change_starts, line_number)
+    end
+  end
+
+  local current_line = vim.api.nvim_win_get_cursor(0)[1]
+  local target_line
+  if direction > 0 then
+    for _, line_number in ipairs(change_starts) do
+      if line_number > current_line then
+        target_line = line_number
+        break
+      end
+    end
+    target_line = target_line or change_starts[1]
+  else
+    for index = #change_starts, 1, -1 do
+      if change_starts[index] < current_line then
+        target_line = change_starts[index]
+        break
+      end
+    end
+    target_line = target_line or change_starts[#change_starts]
+  end
+
+  vim.api.nvim_win_set_cursor(0, { target_line, 0 })
+  vim.cmd("normal! zz")
 end
 
 local function render_hunks(bufnr, hunks)
@@ -314,26 +351,34 @@ function M.setup()
         end
       end
 
-      local added_lines = {}
+      local changed_lines = {}
+      local line_count = vim.api.nvim_buf_line_count(bufnr)
       for _, hunk in ipairs(hunks) do
-        for _, added_line in ipairs(hunk.added) do
-          added_lines[added_line.line_number] = true
+        if #hunk.added > 0 then
+          for _, added_line in ipairs(hunk.added) do
+            table.insert(changed_lines, added_line.line_number)
+          end
+        elseif #hunk.deleted > 0 then
+          table.insert(changed_lines, math.min(math.max(hunk.new_start, 1), line_count))
         end
       end
-      vim.b[bufnr].no_index_diff_added_lines = added_lines
+      vim.b[bufnr].no_index_diff_changed_lines = changed_lines
+
+      vim.keymap.set("n", "N", function()
+        jump_to_changed_line(1)
+      end, { buffer = bufnr, silent = true, desc = "Next changed line" })
+      vim.keymap.set("n", "P", function()
+        jump_to_changed_line(-1)
+      end, { buffer = bufnr, silent = true, desc = "Previous changed line" })
 
       render_hunks(bufnr, hunks)
       render_comments(bufnr)
 
-      local first_hunk = hunks[1]
-      if first_hunk then
-        local added_line = first_hunk.added[1]
-        local line_number = added_line and added_line.line_number or first_hunk.new_start
-        line_number = math.min(math.max(line_number, 1), vim.api.nvim_buf_line_count(bufnr))
-
+      local first_changed_line = changed_lines[1]
+      if first_changed_line then
         local winid = vim.fn.bufwinid(bufnr)
         if winid ~= -1 then
-          vim.api.nvim_win_set_cursor(winid, { line_number, 0 })
+          vim.api.nvim_win_set_cursor(winid, { first_changed_line, 0 })
           vim.api.nvim_win_call(winid, function()
             vim.cmd("normal! zz")
           end)
@@ -357,9 +402,9 @@ function M.setup()
   function M.add_comment(text)
     local bufnr = vim.api.nvim_get_current_buf()
     local line_number = vim.api.nvim_win_get_cursor(0)[1]
-    local added_lines = vim.b[bufnr].no_index_diff_added_lines or {}
-    if not added_lines[line_number] then
-      vim.notify("DiffComment requires the cursor on an added line", vim.log.levels.ERROR)
+    local changed_lines = vim.b[bufnr].no_index_diff_changed_lines or {}
+    if not vim.tbl_contains(changed_lines, line_number) then
+      vim.notify("DiffComment requires the cursor on a changed line", vim.log.levels.ERROR)
       return
     end
 
