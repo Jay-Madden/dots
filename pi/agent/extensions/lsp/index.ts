@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type {
-  EditToolInput,
-  ExtensionAPI,
-  ExtensionContext,
-  ReadToolInput,
-  WriteToolInput,
+import {
+  type EditToolInput,
+  type ExtensionAPI,
+  type ExtensionContext,
+  isReadToolResult,
+  type ReadToolInput,
+  type WriteToolInput,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
@@ -30,13 +31,22 @@ type DiagnosticDetails = {
   remaining: number;
 };
 
+type DocumentState = {
+  version: number;
+  text?: string;
+  diagnostics: {
+    version: number | undefined;
+    items: Diagnostic[];
+  };
+};
+
 const automaticDiagnosticLimit = 10;
 const diagnosticsToolName = "get_diagnostics";
 
 export default function (pi: ExtensionAPI) {
   const clients: LspClient[] = [];
   let cwd: string | undefined;
-  const versions = new Map<string, number>();
+  const documents = new Map<string, DocumentState>();
   const published = new Map<string, string>();
 
   const showAllRequests = new Set<string>();
@@ -45,6 +55,24 @@ export default function (pi: ExtensionAPI) {
     "lsp-diagnostics",
     (message, options, theme) => {
       const details = message.details as DiagnosticDetails;
+      const remainingLabel = details.remaining > 0
+        ? ` (${details.remaining} more available)`
+        : "";
+      const label = `${details.serverName}: ${details.count} error${details.count === 1 ? "" : "s"} in ${details.file}${remainingLabel}`;
+      const text = options.expanded
+        ? `${theme.fg("error", label)}\n${theme.fg("dim", details.diagnostics)}`
+        : theme.fg("dim", label);
+      return new Text(text, 1, 0);
+    },
+  );
+
+  pi.registerEntryRenderer<DiagnosticDetails>(
+    "lsp-diagnostics",
+    (entry, options, theme) => {
+      if (!entry.data) {
+        return new Text("", 1, 0);
+      }
+      const details = entry.data;
       const remainingLabel = details.remaining > 0
         ? ` (${details.remaining} more available)`
         : "";
@@ -74,16 +102,45 @@ export default function (pi: ExtensionAPI) {
 
       const file = resolve(ctx.cwd, path);
       const uri = pathToFileURL(file).href;
-      const version = (versions.get(uri) ?? 0) + 1;
+      const text = await readFile(file, "utf8");
+      const document = getDocumentState(uri);
+
+      if (
+        document.text === text &&
+        document.diagnostics.version === document.version
+      ) {
+        const serverName = commands[language].name;
+        const errors = document.diagnostics.items.filter(
+          (diagnostic) => diagnostic.severity === DiagnosticSeverity.Error,
+        );
+        const diagnostics = errors.map(
+          (diagnostic) => formatDiagnostic(path, diagnostic),
+        ).join("\n");
+        const content = errors.length === 0
+          ? `No ${serverName} errors for ${path}.`
+          : `${serverName} diagnostics for ${path}:\n${diagnostics}`;
+
+        return {
+          content: [{ type: "text", text: content }],
+          details: {
+            serverName,
+            file: path,
+            count: errors.length,
+            diagnostics,
+            remaining: 0,
+          } satisfies DiagnosticDetails,
+        };
+      }
+
       showAllRequests.add(uri);
-      await syncFile(language, file, ctx.cwd, ctx, version);
+      await syncFile(language, uri, text, document, ctx.cwd, ctx);
 
       return {
         content: [{
           type: "text",
-          text: `Requested fresh diagnostics for ${path}.`,
+          text: `Requested diagnostics for ${path}.`,
         }],
-        details: { path, version },
+        details: { path, version: document.version },
       };
     },
     renderCall(args, theme) {
@@ -129,15 +186,13 @@ export default function (pi: ExtensionAPI) {
   };
 
   pi.on("tool_result", async (event, ctx) => {
-    if (event.isError || !["edit", "read", "write"].includes(event.toolName)) {
+    if (!isReadToolResult(event) || event.isError) {
       return undefined;
     }
 
-    const input = event.input as EditToolInput | ReadToolInput | WriteToolInput;
-
+    const input = event.input as ReadToolInput;
     const path = input.path.replace(/^@/, "");
     const file = resolve(ctx.cwd, path);
-
     const language = languageByExtension[extname(path).toLowerCase()];
     if (!language) {
       return undefined;
@@ -148,12 +203,97 @@ export default function (pi: ExtensionAPI) {
       return undefined;
     }
 
-    void syncFile(language, file, ctx.cwd, ctx).catch((error) => {
+    try {
+      const uri = pathToFileURL(file).href;
+      const text = await readFile(file, "utf8");
+      const document = getDocumentState(uri);
+      if (document.text !== text) {
+        await syncFile(language, uri, text, document, ctx.cwd, ctx);
+      }
+
+      if (document.diagnostics.version !== document.version) {
+        return {
+          content: [
+            ...event.content,
+            {
+              type: "text",
+              text: `LSP diagnostics for ${path} are pending; any errors will be returned separately when available.`,
+            },
+          ],
+        };
+      }
+
+      const errors = document.diagnostics.items.filter(
+        (diagnostic) => diagnostic.severity === DiagnosticSeverity.Error,
+      );
+      if (errors.length === 0) {
+        return undefined;
+      }
+
+      const shown = errors.slice(0, automaticDiagnosticLimit);
+      const diagnostics = shown.map(
+        (diagnostic) => formatDiagnostic(path, diagnostic),
+      ).join("\n");
+      const remaining = errors.length - shown.length;
+      const suffix = remaining > 0
+        ? `\n${remaining} more diagnostics are available. Call ${diagnosticsToolName} to retrieve them.`
+        : "";
+      pi.appendEntry("lsp-diagnostics", {
+        serverName: commands[language].name,
+        file: path,
+        count: errors.length,
+        diagnostics,
+        remaining,
+      } satisfies DiagnosticDetails);
+      return {
+        content: [
+          ...event.content,
+          {
+            type: "text",
+            text: `${commands[language].name} diagnostics for ${path}:\n${diagnostics}${suffix}`,
+          },
+        ],
+      };
+    } catch (error) {
       ctx.ui.notify(
         error instanceof Error ? error.message : String(error),
         "warning",
       );
-    });
+      return undefined;
+    }
+  });
+
+  pi.on("tool_result", async (event, ctx) => {
+    if (event.isError || !["edit", "write"].includes(event.toolName)) {
+      return undefined;
+    }
+
+    const input = event.input as EditToolInput | WriteToolInput;
+    const path = input.path.replace(/^@/, "");
+    const file = resolve(ctx.cwd, path);
+    const language = languageByExtension[extname(path).toLowerCase()];
+    if (!language) {
+      return undefined;
+    }
+
+    if (!isWithinDirectory(file, ctx.cwd)) {
+      ctx.ui.notify(`Not starting lsp, file ${file} is outside of the current working directory`, "info");
+      return undefined;
+    }
+
+    try {
+      const uri = pathToFileURL(file).href;
+      const text = await readFile(file, "utf8");
+      const document = getDocumentState(uri);
+      if (document.text !== text) {
+        await syncFile(language, uri, text, document, ctx.cwd, ctx);
+      }
+    } catch (error) {
+      ctx.ui.notify(
+        error instanceof Error ? error.message : String(error),
+        "warning",
+      );
+    }
     return undefined;
   });
 
@@ -167,26 +307,31 @@ export default function (pi: ExtensionAPI) {
 
   async function syncFile(
     language: LspLanguage,
-    file: string,
+    uri: string,
+    text: string,
+    document: DocumentState,
     workspace: string,
     ctx: ExtensionContext,
-    requestedVersion?: number,
   ) {
     const active = await ensureClient(language, workspace, ctx);
-    const uri = pathToFileURL(file).href;
-    const text = await readFile(file, "utf8");
-    const version = requestedVersion ?? (versions.get(uri) ?? 0) + 1;
-    versions.set(uri, version);
+    const isOpen = document.version > 0;
+    document.version += 1;
+    document.text = text;
 
-    if (version === 1) {
+    if (!isOpen) {
       active.connection.sendNotification("textDocument/didOpen", {
-        textDocument: { uri, languageId: language, version, text },
+        textDocument: {
+          uri,
+          languageId: language,
+          version: document.version,
+          text,
+        },
       });
       return;
     }
 
     active.connection.sendNotification("textDocument/didChange", {
-      textDocument: { uri, version },
+      textDocument: { uri, version: document.version },
       contentChanges: [{ text }],
     });
   }
@@ -197,9 +342,17 @@ export default function (pi: ExtensionAPI) {
   ) {
     if (
       params.version !== undefined &&
-      versions.get(params.uri) !== params.version
+      documents.get(params.uri)?.version !== params.version
     ) {
       return;
+    }
+
+    const document = documents.get(params.uri);
+    if (document) {
+      document.diagnostics = {
+        version: params.version,
+        items: params.diagnostics,
+      };
     }
 
     const errors = params.diagnostics.filter(
@@ -217,7 +370,9 @@ export default function (pi: ExtensionAPI) {
 
     const file = relative(cwd, fileURLToPath(params.uri));
     const shown = showAll ? errors : errors.slice(0, automaticDiagnosticLimit);
-    const diagnostics = shown.map(formatDiagnostic).join("\n");
+    const diagnostics = shown.map(
+      (diagnostic) => formatDiagnostic(file, diagnostic),
+    ).join("\n");
     const remainingCount = errors.length - shown.length;
     const suffix = remainingCount > 0
       ? `\n${remainingCount} more diagnostics are available. Call ${diagnosticsToolName} to retrieve them.`
@@ -239,6 +394,15 @@ export default function (pi: ExtensionAPI) {
       { deliverAs: "steer", triggerTurn: true },
     );
   }
+
+  function getDocumentState(uri: string): DocumentState {
+    const document = documents.get(uri) ?? {
+      version: 0,
+      diagnostics: { version: undefined, items: [] },
+    };
+    documents.set(uri, document);
+    return document;
+  }
 }
 
 
@@ -250,9 +414,21 @@ function isWithinDirectory(file: string, directory: string): boolean {
       !isAbsolute(relativePath));
 }
 
-function formatDiagnostic(diagnostic: Diagnostic): string {
+function formatDiagnostic(file: string, diagnostic: Diagnostic): string {
   const line = diagnostic.range.start.line + 1;
   const column = diagnostic.range.start.character + 1;
-  const source = diagnostic.source ? ` [${diagnostic.source}]` : "";
-  return `${line}:${column}: ${diagnostic.message}${source}`;
+  const severity = diagnostic.severity === DiagnosticSeverity.Error
+    ? "error"
+    : "diagnostic";
+  const isTypeScript = diagnostic.source === "ts" ||
+    diagnostic.source === "typescript";
+  const code = diagnostic.code === undefined
+    ? ""
+    : isTypeScript
+    ? ` TS${diagnostic.code}`
+    : ` ${diagnostic.code}`;
+  const source = diagnostic.source && !isTypeScript
+    ? ` [${diagnostic.source}]`
+    : "";
+  return `${file}:${line}:${column}: ${severity}${code}: ${diagnostic.message}${source}`;
 }

@@ -140,7 +140,15 @@ export class LspClient {
       workspaceFolders: [{ uri: rootUri, name: basename(options.cwd) }],
       capabilities: {
         workspace: { configuration: true, workspaceFolders: true },
-        textDocument: { publishDiagnostics: {} },
+        textDocument: {
+          synchronization: {
+            dynamicRegistration: false,
+            willSave: false,
+            willSaveWaitUntil: false,
+            didSave: false,
+          },
+          publishDiagnostics: { versionSupport: true },
+        },
       },
     };
     await connection.sendRequest<InitializeResult>("initialize", params);
