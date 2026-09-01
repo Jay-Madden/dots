@@ -145,7 +145,14 @@ impl ZellijPlugin for TabBar {
             const ARROW_PADDING: usize = 4;
 
             let available_width = cols.saturating_sub(used + ARROW_PADDING);
+
             let label = tab_label(tab_view);
+            let label = if tab_view.panes.len() > 1 {
+                format!("[{}] {label}", tab_view.panes.len())
+            } else {
+                label
+            };
+
             let label = truncate_to_width(label.as_str(), available_width);
             let label_width = UnicodeWidthStr::width(label.as_str());
             if label_width == 0 {
