@@ -1,8 +1,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { parse } from "yaml";
 
 export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
+    const currentContext = await getCurrentKubeContext();
+
     ctx.ui.setFooter((tui, theme, footerData) => {
       const unsubscribe = footerData.onBranchChange(() => tui.requestRender());
 
@@ -32,7 +38,10 @@ export default function (pi: ExtensionAPI) {
           }
 
           const branch = footerData.getGitBranch();
-          const path = branch ? `${ctx.cwd} (${branch})` : ctx.cwd;
+          const basePath = branch ? `${ctx.cwd} (${branch})` : ctx.cwd;
+          const path = currentContext
+            ? `${basePath} | ☸ ${currentContext}`
+            : basePath;
           const usage = ctx.getContextUsage();
           const context = usage?.percent === null
             ? `?/${formatTokens(usage.contextWindow)}`
@@ -60,6 +69,19 @@ export default function (pi: ExtensionAPI) {
       };
     });
   });
+}
+
+async function getCurrentKubeContext(): Promise<string | undefined> {
+  const path = process.env.KUBECONFIG || join(homedir(), ".kube", "config");
+
+  try {
+    const config = parse(await readFile(path, "utf8")) as {
+      "current-context"?: string;
+    };
+    return config["current-context"];
+  } catch {
+    return undefined;
+  }
 }
 
 function formatTokens(count: number): string {
