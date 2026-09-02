@@ -6,6 +6,13 @@ user-invocable: false
 
 # Writing Code
 
+## Epistemology
+
+- Simplicity is a virtue, ALWAYS start small and build up.
+- Do not assume a broader usecase and design for that without being told to do so.
+- Patches should be focused and concise.
+- Do one thing and do it well.
+
 ## ASCII only
 
 - NEVER, under any fucking circumstances, use non-ASCII characters in code, comments, docs, commit messages, or any other text you write or edit. No em-dashes, no en-dashes, no smart quotes, no curly apostrophes, no ellipsis characters, no arrows, no bullets, no emoji, no accented letters, no Greek letters, no non-breaking spaces. ASCII only, full stop.
