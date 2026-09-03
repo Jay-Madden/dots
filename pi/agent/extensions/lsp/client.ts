@@ -9,6 +9,7 @@ import type {
   InitializeParams,
   InitializeResult,
   PublishDiagnosticsParams,
+  ServerCapabilities,
 } from "vscode-languageserver-protocol";
 
 export type LspLanguage =
@@ -85,6 +86,7 @@ export class LspClient {
   readonly language: LspLanguage;
   readonly process: ChildProcessWithoutNullStreams;
   readonly connection: MessageConnection;
+  readonly capabilities: ServerCapabilities = {};
   private stopped = false;
 
   private constructor(
@@ -139,7 +141,11 @@ export class LspClient {
       rootUri,
       workspaceFolders: [{ uri: rootUri, name: basename(options.cwd) }],
       capabilities: {
-        workspace: { configuration: true, workspaceFolders: true },
+        workspace: {
+          configuration: true,
+          workspaceFolders: true,
+          workspaceEdit: { documentChanges: true },
+        },
         textDocument: {
           synchronization: {
             dynamicRegistration: false,
@@ -148,10 +154,19 @@ export class LspClient {
             didSave: false,
           },
           publishDiagnostics: { versionSupport: true },
+          documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          rename: {
+            dynamicRegistration: false,
+            prepareSupport: true,
+          },
         },
       },
     };
-    await connection.sendRequest<InitializeResult>("initialize", params);
+    const result = await connection.sendRequest<InitializeResult>(
+      "initialize",
+      params,
+    );
+    Object.assign(client.capabilities, result.capabilities);
     connection.sendNotification("initialized", {});
     return client;
   }

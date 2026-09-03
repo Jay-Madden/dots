@@ -1,21 +1,31 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   type EditToolInput,
   type ExtensionAPI,
+  generateDiffString,
   type ExtensionContext,
   isReadToolResult,
+  keyHint,
   type ReadToolInput,
   type WriteToolInput,
+  renderDiff,
+  withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Container, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type {
   Diagnostic,
+  PrepareRenameResult,
   PublishDiagnosticsParams,
+  TextDocumentEdit,
+  TextEdit,
+  WorkspaceEdit,
 } from "vscode-languageserver-protocol";
 import { DiagnosticSeverity } from "vscode-languageserver-protocol";
+import { TextDocument } from "vscode-languageserver-textdocument";
+import { approval } from "../components/approval.ts";
 import {
   commands,
   languageByExtension,
@@ -50,6 +60,142 @@ export default function (pi: ExtensionAPI) {
   const published = new Map<string, string>();
 
   const showAllRequests = new Set<string>();
+
+  pi.registerTool({
+    name: "rename_symbol",
+    label: "Rename Symbol",
+    description: "Rename a symbol using the language server. The file must have been read first. Line and column are 1-based.",
+    parameters: Type.Object({
+      path: Type.String(),
+      line: Type.Integer({ minimum: 1 }),
+      column: Type.Integer({ minimum: 1 }),
+      newName: Type.String(),
+    }),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const path = params.path.replace(/^@/, "");
+      const file = resolve(ctx.cwd, path);
+      const language = languageByExtension[extname(path).toLowerCase()];
+      const uri = pathToFileURL(file).href;
+      const document = documents.get(uri);
+      if (!language || document?.text === undefined) {
+        throw new Error(`Read ${path} before renaming a symbol in it`);
+      }
+
+      const active = clients.find((client) => client.language === language);
+      if (!active?.capabilities.renameProvider) {
+        throw new Error(`${commands[language].name} does not support rename`);
+      }
+
+      const position = {
+        line: params.line - 1,
+        character: params.column - 1,
+      };
+      const prepared = await active.connection.sendRequest<PrepareRenameResult | null>(
+        "textDocument/prepareRename",
+        { textDocument: { uri }, position },
+      );
+
+      if (prepared === null) {
+        throw new Error(`${active.name} cannot rename the symbol at this position`);
+      }
+
+      const range = "start" in prepared
+        ? prepared
+        : "range" in prepared
+        ? prepared.range
+        : undefined;
+      const symbol = range === undefined
+        ? undefined
+        : TextDocument.create(
+          uri,
+          language,
+          document.version,
+          document.text,
+        ).getText(range);
+
+      const workspaceEdit = await active.connection.sendRequest<WorkspaceEdit | null>(
+        "textDocument/rename",
+        {
+          textDocument: { uri },
+          position,
+          newName: params.newName,
+        },
+      );
+      signal?.throwIfAborted();
+      if (!workspaceEdit) {
+        throw new Error(`${active.name} returned no rename edits`);
+      }
+
+      const changes: Array<[string, TextEdit[]]> = [];
+      if (workspaceEdit.documentChanges !== undefined) {
+        for (const change of workspaceEdit.documentChanges as TextDocumentEdit[]) {
+          changes.push([change.textDocument.uri, change.edits as TextEdit[]]);
+        }
+      } else {
+        for (const editUri in workspaceEdit.changes) {
+          changes.push([editUri, workspaceEdit.changes[editUri] ?? []]);
+        }
+      }
+
+      const approvalResult = await approval(
+        ctx,
+        ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Approve rename?")),
+        `  ${symbol ?? "symbol"} \u2192 ${params.newName}\n  ${changes.length} file${changes.length === 1 ? "" : "s"} will change`,
+        "rename_symbol was denied by the user",
+      );
+      if (!approvalResult.approved) {
+        throw new Error(approvalResult.reason);
+      }
+
+      let editCount = 0;
+      const diffs: string[] = [];
+      for (const [editUri, edits] of changes) {
+        const editFile = fileURLToPath(editUri);
+        if (!isWithinDirectory(editFile, ctx.cwd)) {
+          throw new Error(`Rename edit is outside of ${ctx.cwd}`);
+        }
+        await withFileMutationQueue(editFile, async () => {
+          signal?.throwIfAborted();
+          const text = await readFile(editFile, "utf8");
+          const textDocument = TextDocument.create(editUri, "", 0, text);
+          const updated = TextDocument.applyEdits(textDocument, edits);
+          const diff = generateDiffString(text, updated).diff;
+          diffs.push(`${relative(ctx.cwd, editFile)}\n${diff}`);
+          await writeFile(editFile, updated);
+        });
+        editCount += edits.length;
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: `Renamed symbol to ${params.newName} with ${editCount} edits.`,
+        }],
+        details: { diff: diffs.join("\n"), editCount, fileCount: changes.length, symbol },
+      };
+    },
+    renderResult(result, options, theme, context) {
+      if (options.isPartial || result.details === undefined) {
+        return new Container();
+      }
+      const details = result.details as {
+        diff: string;
+        fileCount: number;
+        symbol?: string;
+      };
+      const rename = `${details.symbol ?? "symbol"} \u2192 ${context.args.newName}`;
+      const expandHint = options.expanded
+        ? ""
+        : ` (${keyHint("app.tools.expand", "to expand")})`;
+      const files = `${details.fileCount} file${details.fileCount === 1 ? "" : "s"} changed${expandHint}`;
+      const diff = options.expanded ? `\n\n${renderDiff(details.diff)}` : "";
+      return new Text(
+        `${theme.fg("accent", rename)}\n${theme.fg("muted", files)}${diff}`,
+        0,
+        0,
+      );
+    },
+  });
 
   pi.registerMessageRenderer<DiagnosticDetails>(
     "lsp-diagnostics",
