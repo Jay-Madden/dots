@@ -295,9 +295,17 @@ export default function (pi: ExtensionAPI) {
         display: true,
       });
 
+      let reason = defaultReason;
+      if (reviewDetails) {
+        reason = "Review comments were submitted.";
+        if (toolCall.toolName === "write") {
+          reason += " The file was not written.";
+        }
+      }
+
       return {
         approved: false,
-        reason: reviewDetails ? "Review comments were submitted." : defaultReason,
+        reason,
       };
     };
 
