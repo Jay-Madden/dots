@@ -20,7 +20,7 @@ export default function (pi: ExtensionAPI) {
 
     if (isCollapsed) {
       rendered.push(
-        theme.fg("muted", `${VERTICAL_BAR} (${keyHint("app.tools.expand", "to expand")})`),
+        theme.fg("muted", `${VERTICAL_BAR} ${keyHint("app.tools.expand", "to expand")}`),
       );
     }
 
