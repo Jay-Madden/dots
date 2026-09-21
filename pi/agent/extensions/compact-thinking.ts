@@ -1,5 +1,5 @@
-import { keyHint, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey } from "@earendil-works/pi-tui";
+import { getMarkdownTheme, keyHint, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
+import { Key, Markdown, matchesKey } from "@earendil-works/pi-tui";
 
 const COMPACT_LINE_COUNT = 3;
 const VERTICAL_BAR = "\u2502";
@@ -18,7 +18,7 @@ export default function (pi: ExtensionAPI) {
   }> = [];
   let elapsedTimer: ReturnType<typeof setInterval> | undefined;
 
-  pi.registerMarkdownTransformer((markdown, { messageType }) => {
+  pi.registerMarkdownTransformer((markdown, { messageType, availableWidth }) => {
     if (messageType !== "assistant-thinking") {
       return markdown;
     }
@@ -27,7 +27,12 @@ export default function (pi: ExtensionAPI) {
 
     const isCollapsed = !extended && lines.length > COMPACT_LINE_COUNT;
     const content = isCollapsed ? lines.slice(-COMPACT_LINE_COUNT) : lines;
-    const rendered = content.map((line) => theme.fg("muted", `${VERTICAL_BAR} ${line}`));
+    const markdownTheme = getMarkdownTheme();
+    const rendered = content.flatMap((line) =>
+      new Markdown(line, 0, 0, markdownTheme, { italic: true })
+        .render(Math.max(1, availableWidth - 4))
+        .map((wrappedLine, index) => `${VERTICAL_BAR} ${index === 0 ? "" : "  "}${wrappedLine.trimEnd()}`),
+    );
 
     const thinking = normalizeThinking(lines.join(""));
     const thinkingBlock = thinkingBlocks.find((block) => {
@@ -52,7 +57,13 @@ export default function (pi: ExtensionAPI) {
       rendered.push(theme.fg("muted", `${VERTICAL_BAR} ${elapsed.trimEnd()}`));
     }
 
-    return rendered.join("\n");
+    const mutedColor = theme.getFgAnsi("muted");
+    return rendered.map((line) => {
+      const fence = "`".repeat(Math.max(0, ...Array.from(line.matchAll(/`+/g), (match) => match[0].length)) + 1);
+      const muted = line.replace(/\x1b\[[\d;]*m/g, `$&${mutedColor}`);
+      // Code spans keep the outer Markdown pass from recoloring the rendered text.
+      return `${fence}${theme.fg("muted", muted)}${fence}`;
+    }).join("\n");
   });
 
   pi.on("session_start", (_event, ctx) => {
