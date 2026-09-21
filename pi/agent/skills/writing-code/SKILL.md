@@ -34,6 +34,7 @@ user-invocable: false
 - Do NOT edit existing comments unless explicitly asked.
 - A comment is a heavy mental load that should only exist when things need to be explained.
 - Never write comments like `// (e.g. ...)` or similar parenthetical filler.
+- Keep short comments as one natural sentence instead of splitting a single thought into multiple sentences or joining it with a semicolon.
 
 ### Doc comments
 
