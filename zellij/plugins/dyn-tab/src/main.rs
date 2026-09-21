@@ -55,7 +55,7 @@ impl ZellijPlugin for TabBar {
     }
 
     fn update(&mut self, event: Event) -> bool {
-        match event {
+        let should_render = match event {
             Event::ModeUpdate(mode_info) => {
                 self.mode_info = Some(mode_info);
                 true
@@ -97,7 +97,6 @@ impl ZellijPlugin for TabBar {
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_else(|| cwd.to_string_lossy().into_owned());
-                let cwd = truncate_cwd(&cwd);
 
                 let changed = view_pane.cwd != cwd;
                 view_pane.cwd = cwd;
@@ -115,7 +114,12 @@ impl ZellijPlugin for TabBar {
                 false
             }
             _ => false,
+        };
+
+        if should_render {
+            self.sync_tab_names();
         }
+        should_render
     }
 
     fn render(&mut self, rows: usize, cols: usize) {
@@ -146,7 +150,7 @@ impl ZellijPlugin for TabBar {
 
             let available_width = cols.saturating_sub(used + ARROW_PADDING);
 
-            let label = tab_label(tab_view);
+            let label = tab_label(tab_view, true);
             let label = if tab_view.panes.len() > 1 {
                 format!("[{}] {label}", tab_view.panes.len())
             } else {
@@ -183,6 +187,16 @@ impl ZellijPlugin for TabBar {
 }
 
 impl TabBar {
+    fn sync_tab_names(&mut self) {
+        for tab_view in &mut self.tabs {
+            let name = tab_label(tab_view, false);
+            if name != tab_view.tab.name {
+                rename_tab_with_id(tab_view.tab.tab_id as u64, &name);
+                tab_view.tab.name = name;
+            }
+        }
+    }
+
     fn set_state_from_session(&mut self, mut session: SessionInfo) {
         // If the plugin pane is the only one left in the tab then its been closed
         // and we should kill ourselves
@@ -252,7 +266,7 @@ impl TabBar {
                                     cwd.file_name()
                                         .map(|name| name.to_string_lossy().into_owned())
                                 })
-                                .map(|cwd| truncate_cwd(&cwd))
+                                // .map(|cwd| truncate_cwd(&cwd))
                                 .unwrap_or_default();
 
                             // Load the process only if we have never seen the pane before.
@@ -296,11 +310,16 @@ impl TabBar {
     }
 }
 
-fn tab_label(tab: &ViewTab) -> String {
+fn tab_label(tab: &ViewTab, truncate_cwd: bool) -> String {
     let Some(pane) = tab.panes.iter().find(|pane| pane.pane.is_focused) else {
         return tab.tab.name.clone();
     };
-    let label = [pane.process.as_str(), pane.cwd.as_str()]
+    let cwd = if truncate_cwd {
+        crate::truncate_cwd(&pane.cwd)
+    } else {
+        pane.cwd.clone()
+    };
+    let label = [pane.process.as_str(), cwd.as_str()]
         .into_iter()
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>()
