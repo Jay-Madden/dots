@@ -4,6 +4,7 @@ local config = wezterm.config_builder()
 
 config.default_cursor_style = "SteadyBar"
 config.audible_bell = "Disabled"
+config.enable_kitty_keyboard = true
 
 local custom_kanagawa = wezterm.color.get_builtin_schemes()["Kanagawa (Gogh)"]
 -- Make the green accept color slightly brighter then the default theme
