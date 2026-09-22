@@ -34,6 +34,7 @@ export default function (pi: ExtensionAPI) {
         .map((wrappedLine, index) => `${VERTICAL_BAR} ${index === 0 ? "" : "  "}${wrappedLine.trimEnd()}`),
     );
 
+    const contentLineCount = rendered.length;
     const thinking = normalizeThinking(lines.join(""));
     const thinkingBlock = thinkingBlocks.find((block) => {
       return block.content.join("") === thinking;
@@ -50,19 +51,24 @@ export default function (pi: ExtensionAPI) {
     }
     if (isCollapsed) {
       rendered.push(
-        theme.fg("muted", `${VERTICAL_BAR} ${elapsed}(${keyHint("app.tools.expand", "to expand")}`)
+        theme.fg("muted", `${VERTICAL_BAR} ${elapsed}(`)
+          + keyHint("app.tools.expand", "to expand")
           + theme.fg("muted", ")"),
       );
     } else if (elapsed) {
       rendered.push(theme.fg("muted", `${VERTICAL_BAR} ${elapsed.trimEnd()}`));
     }
 
-    const mutedColor = theme.getFgAnsi("muted");
-    return rendered.map((line) => {
+    return rendered.map((line, index) => {
       const fence = "`".repeat(Math.max(0, ...Array.from(line.matchAll(/`+/g), (match) => match[0].length)) + 1);
-      const muted = line.replace(/\x1b\[[\d;]*m/g, `$&${mutedColor}`);
+      if (index >= contentLineCount) {
+        return `${fence}${line}${fence}`;
+      }
+      const foreground = theme.getFgAnsi("thinkingText");
+      const styled = line.replace(/\x1b\[[\d;]*m/g, `$&${foreground}`);
+      const framed = theme.fg("thinkingText", styled).replace(VERTICAL_BAR, theme.fg("muted", VERTICAL_BAR) + foreground);
       // Code spans keep the outer Markdown pass from recoloring the rendered text.
-      return `${fence}${theme.fg("muted", muted)}${fence}`;
+      return `${fence}${framed}${fence}`;
     }).join("\n");
   });
 
