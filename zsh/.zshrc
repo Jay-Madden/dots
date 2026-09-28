@@ -138,7 +138,6 @@ plugins=(
 
 # Setup completions
 fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
-autoload -U compinit && compinit
 source $ZSH/oh-my-zsh.sh
 
 # User configuration
@@ -286,9 +285,65 @@ watch() {
   done
 }
 
+killrabbit() {
+    emulate -L zsh
+    local pr_id thread_ids thread_id
+    local resolved=0
+
+    pr_id=$(gh pr view --json id,state --jq 'select(.state == "OPEN") | .id') || return 1
+    if [[ -z "$pr_id" ]]; then
+        print -u2 -- "killrabbit: no open PR for the current branch"
+        return 1
+    fi
+
+    thread_ids=$(gh api graphql --paginate -f pr="$pr_id" -f query='
+        query($pr: ID!, $endCursor: String) {
+            node(id: $pr) {
+                ... on PullRequest {
+                    reviewThreads(first: 100, after: $endCursor) {
+                        nodes {
+                            id
+                            isResolved
+                            comments(first: 1) { nodes { author { login } } }
+                        }
+                        pageInfo { hasNextPage endCursor }
+                    }
+                }
+            }
+        }
+    ' --jq '
+        .data.node.reviewThreads.nodes[]
+        | select(.isResolved == false)
+        | select(.comments.nodes[0].author.login == "coderabbitai"
+            or .comments.nodes[0].author.login == "coderabbitai[bot]")
+        | .id
+    ') || return 1
+
+    if [[ -z "$thread_ids" ]]; then
+        print -- "killrabbit: no unresolved CodeRabbit review threads"
+        return 0
+    fi
+
+    for thread_id in "${(@f)thread_ids}"; do
+        gh api graphql -f thread="$thread_id" -f query='
+            mutation($thread: ID!) {
+                resolveReviewThread(input: {threadId: $thread}) {
+                    thread { isResolved }
+                }
+            }
+        ' --silent || {
+            print -u2 -- "killrabbit: failed on thread $thread_id after resolving $resolved thread(s)"
+            return 1
+        }
+        resolved=$((resolved + 1))
+    done
+
+    print -- "killrabbit: resolved $resolved CodeRabbit review thread(s)"
+}
+
 # Kubernetes aliases
 alias k='kubectl'
-source <(kubectl completion zsh)
+source /opt/homebrew/share/zsh/site-functions/_kubectl
 
 # Simple cluster selector
 alias cs="export KUBECONFIG=\$(fd '.*' $HOME/.kube/configs/* | tv --ui-scale 40)"
@@ -296,7 +351,7 @@ alias cs="export KUBECONFIG=\$(fd '.*' $HOME/.kube/configs/* | tv --ui-scale 40)
 alias zt="$HOME/.config/zellij/zt"
 
 TARGET="wasm32-wasip1"
-if ! rustup target list --installed | grep -q "^$TARGET$"; then
+if [[ "$PWD" == "$HOME" ]] && ! rustup target list --installed | grep -q "^$TARGET$"; then
     rustup target add "$TARGET"
 fi
 
