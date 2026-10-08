@@ -371,6 +371,7 @@ const allowedCommands = new Set<AllowedCommand>([
       {
         name: "run",
         allowedCommands: new Set([
+          { name: "list" },
           { name: "view" },
         ]),
       },
