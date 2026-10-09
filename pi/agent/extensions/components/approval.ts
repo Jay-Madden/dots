@@ -10,10 +10,27 @@ import {
 
 export type Approval = { approved: true } | { approved: false; reason: string };
 
+export type ApprovalOption = {
+  display: string;
+  onSelect: () => Approval | undefined | Promise<Approval | undefined>;
+  feedback?: boolean;
+};
+
 export type ApprovalShortcut = {
   key: KeyId;
   display: string;
-  onSelect: () => Approval | undefined | Promise<Approval | undefined>;
+  onSelect: ApprovalOption["onSelect"];
+};
+
+export const YES_OPTION: ApprovalOption = {
+  display: "Yes",
+  onSelect: () => ({ approved: true }),
+};
+
+export const NO_OPTION: ApprovalOption = {
+  display: "No",
+  onSelect: () => ({ approved: false, reason: "Denied by the user" }),
+  feedback: true,
 };
 
 export async function approval(
@@ -22,12 +39,34 @@ export async function approval(
   message: string,
   defaultReason: string,
   shortcuts: ApprovalShortcut[] = [],
+  options: ApprovalOption[] = [
+    YES_OPTION,
+    NO_OPTION,
+  ],
 ): Promise<Approval> {
+  if (options.length === 0) {
+    return { approved: false, reason: defaultReason };
+  }
+
   if (ctx.mode !== "tui") {
-    const approved = await ctx.ui.confirm(title, message);
-    return approved
-      ? { approved: true }
-      : { approved: false, reason: defaultReason };
+    while (true) {
+      const selected = await ctx.ui.select(`${title}\n${message}`, options.map((option) => option.display));
+      const option = options.find((option) => option.display === selected);
+      if (!option) {
+        return { approved: false, reason: defaultReason };
+      }
+      try {
+        const result = await option.onSelect();
+        if (result) {
+          return result;
+        }
+      } catch (error: unknown) {
+        return {
+          approved: false,
+          reason: error instanceof Error ? error.message : defaultReason,
+        };
+      }
+    }
   }
 
   // Send a Zellij notification when an approval needs attention.
@@ -36,7 +75,7 @@ export async function approval(
   }
 
   return ctx.ui.custom<Approval>((tui, theme, keybindings, done) => {
-    let selected: "yes" | "no" = "yes";
+    let selected = 0;
     let feedbackMode = false;
     const input = new Input();
 
@@ -49,6 +88,22 @@ export async function approval(
       feedbackMode = false;
       input.setValue("");
       tui.requestRender();
+    };
+
+    const select = async (option: ApprovalOption) => {
+      try {
+        const result = await option.onSelect();
+        if (result) {
+          done(result);
+        } else {
+          tui.requestRender();
+        }
+      } catch (error: unknown) {
+        done({
+          approved: false,
+          reason: error instanceof Error ? error.message : defaultReason,
+        });
+      }
     };
 
     return {
@@ -82,7 +137,7 @@ export async function approval(
         if (feedbackMode) {
           if (matchesKey(data, Key.up)) {
             feedbackMode = false;
-            selected = "yes";
+            selected = 0;
             input.setValue("");
           } else {
             input.handleInput(data);
@@ -93,36 +148,21 @@ export async function approval(
 
         const shortcut = shortcuts.find((item) => matchesKey(data, item.key));
         if (shortcut) {
-          void (async () => {
-            try {
-              const result = await shortcut.onSelect();
-              if (result) {
-                done(result);
-              } else {
-                tui.requestRender();
-              }
-            } catch (error: unknown) {
-              done({
-                approved: false,
-                reason: error instanceof Error ? error.message : defaultReason,
-              });
-            }
-          })();
+          void select(shortcut);
           return;
         }
 
         if (matchesKey(data, Key.left) || matchesKey(data, Key.up)) {
-          selected = "yes";
+          selected = Math.max(0, selected - 1);
         } else if (matchesKey(data, Key.right) || matchesKey(data, Key.down)) {
-          selected = "no";
-        } else if (matchesKey(data, Key.tab) && selected === "no") {
+          selected = Math.min(options.length - 1, selected + 1);
+        } else if (matchesKey(data, Key.tab) && options[selected]?.feedback) {
           feedbackMode = true;
         } else if (matchesKey(data, Key.enter)) {
-          done(
-            selected === "yes"
-              ? { approved: true }
-              : { approved: false, reason: defaultReason },
-          );
+          const option = options[selected];
+          if (option) {
+            void select(option);
+          }
           return;
         } else if (matchesKey(data, Key.escape)) {
           done({ approved: false, reason: defaultReason });
@@ -142,24 +182,19 @@ export async function approval(
         const padding = "   ";
         // this emote →
         const selectedPrefix = " \u2192 ";
-        lines.push(
-          selected === "yes"
-            ? theme.fg("accent", `${selectedPrefix}Yes`)
-            : `${padding}Yes`,
-        );
-        lines.push(
-          selected === "no"
-            ? theme.fg("accent", `${selectedPrefix}No`)
-            : `${padding}No`,
-        );
+        for (const [index, option] of options.entries()) {
+          let line = selected === index
+            ? theme.fg("accent", `${selectedPrefix}${option.display}`)
+            : `${padding}${option.display}`;
 
-        if (feedbackMode) {
-          const inputLines = input.render(Math.max(1, innerWidth - 5));
-          const feedback = input.getValue()
-            ? (inputLines[0] ?? "").slice(2)
-            : "What should I do differently?";
-          lines[lines.length - 1] =
-            `${lines[lines.length - 1]} ${theme.fg("dim", feedback)}`;
+          if (feedbackMode && selected === index) {
+            const inputLines = input.render(Math.max(1, innerWidth - 5));
+            const feedback = input.getValue()
+              ? (inputLines[0] ?? "").slice(2)
+              : "What should I do differently?";
+            line += ` ${theme.fg("dim", feedback)}`;
+          }
+          lines.push(line);
         }
 
         lines.push("");
