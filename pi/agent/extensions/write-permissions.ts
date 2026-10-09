@@ -19,7 +19,13 @@ import {
   normalizeToLF,
   stripBom,
 } from "./vendor/edit-diff.ts";
-import { approval, type Approval } from "./components/approval.ts";
+import {
+  approval,
+  NO_OPTION,
+  YES_OPTION,
+  type Approval,
+  type ApprovalOption,
+} from "./components/approval.ts";
 
 type Review = {
   directory: string;
@@ -209,6 +215,19 @@ function renderReview(
   return output;
 }
 
+function hasMultipleChanges(ctx: ExtensionContext, toolCallId: string): boolean {
+  const entry = ctx.sessionManager.getBranch().findLast((entry) =>
+    entry.type === "message" && entry.message.role === "assistant",
+  );
+  if (entry?.type !== "message" || entry.message.role !== "assistant") {
+    return false;
+  }
+
+  const calls = entry.message.content.filter((content) => content.type === "toolCall");
+  return calls.some((call) => call.id === toolCallId)
+    && calls.filter((call) => call.name === "write" || call.name === "edit").length > 1;
+}
+
 export default function (pi: ExtensionAPI) {
   let approvalsDisabled = false;
   const setApprovalStatus = (ctx: ExtensionContext) => {
@@ -309,6 +328,23 @@ export default function (pi: ExtensionAPI) {
       };
     };
 
+    const options: ApprovalOption[] = [
+      YES_OPTION,
+      NO_OPTION,
+    ];
+    if (hasMultipleChanges(ctx, event.toolCallId)) {
+      options.push({
+        display: "Reject all",
+        onSelect: () => {
+          ctx.abort();
+          return {
+            approved: false,
+            reason: "The user rejected this change and stopped the current run.",
+          };
+        },
+      });
+    }
+
     const approvalResult = await approval(
       ctx,
       ctx.ui.theme.fg("accent", ctx.ui.theme.bold(`Approve ${toolCall.toolName}?`)),
@@ -329,6 +365,7 @@ export default function (pi: ExtensionAPI) {
           onSelect: reviewInEditor,
         },
       ],
+      options,
     );
     if (approvalResult.approved) {
       return undefined;
