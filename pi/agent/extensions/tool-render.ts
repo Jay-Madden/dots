@@ -1,6 +1,6 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { getLanguageFromPath, highlightCode, keyHint, type BashToolInput, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
+import { getLanguageFromPath, highlightCode, keyHint, type BashToolInput, type ExtensionAPI, type ExtensionContext, type Theme, type WriteToolInput } from "@earendil-works/pi-coding-agent";
 import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi-tui";
 
 const HORIZONTAL_RULE = "\u2500";
@@ -10,6 +10,7 @@ const ERROR_SEPARATOR = "\u2014";
 const ERROR_LIGHTENING = 0.5;
 const ERROR_RED = parseColor("#ff7777");
 const BASH_PREVIEW_LINES = 5;
+const WRITE_PREVIEW_LINES = 10;
 interface ToolCallResult {
   status: string;
   durationMs?: number;
@@ -125,6 +126,47 @@ function renderBashCall(
   return lines.map((line) => truncateToWidth(line, width));
 }
 
+function renderWriteCall(
+  writeCall: ToolCall,
+  result: ToolCallResult | undefined,
+  theme: Theme,
+  cwd: string,
+  width: number,
+): string {
+  const args = (writeCall.arguments ?? {}) as Partial<WriteToolInput>;
+  const rawPath = args.path ?? "?";
+  const resolvedPath = resolve(cwd, rawPath);
+  const relativePath = relative(cwd, resolvedPath);
+  let path = rawPath;
+  if (!isAbsolute(relativePath) && relativePath !== ".." && !relativePath.startsWith(`..${sep}`)) {
+    path = relativePath || ".";
+  }
+
+  const lighterError = mixColors(theme.colors.error, ERROR_RED, ERROR_LIGHTENING);
+  let status = "pending";
+  if (result !== undefined) {
+    status = result.status;
+  }
+  let indicator = theme.fg("text", PENDING_CIRCLE);
+  let statusText = "";
+  if (status === "complete") {
+    indicator = theme.fg("success", STATUS_CIRCLE);
+  } else if (status === "failed") {
+    indicator = theme.style(STATUS_CIRCLE, { fg: lighterError });
+    let errorMessage = result?.error;
+    if (errorMessage === undefined) {
+      errorMessage = "write failed";
+    }
+    statusText = ` ${theme.style(`${ERROR_SEPARATOR} ${errorMessage}`, { fg: lighterError })}`;
+  } else if (status === "running") {
+    statusText = ` ${theme.fg("warning", status)}`;
+  } else {
+    statusText = ` ${theme.fg("muted", status)}`;
+  }
+  const label = ` ${indicator} ${theme.fg("toolTitle", "write")} ${theme.fg("accent", path)}${statusText}`;
+  return truncateToWidth(label, width);
+}
+
 function renderReadCall(
   readCall: ToolCall,
   result: ToolCallResult | undefined,
@@ -180,8 +222,10 @@ function renderReadCall(
 export default function (pi: ExtensionAPI) {
   const readGroups: ToolCall[][] = [];
   const bashGroups: ToolCall[][] = [];
+  const writeGroups: ToolCall[][] = [];
   const readResults = new Map<string, ToolCallResult>();
   const bashResults = new Map<string, ToolCallResult>();
+  const writeResults = new Map<string, ToolCallResult>();
   const bashTimers = new Map<string, ReturnType<typeof setInterval>>();
   const bashInvalidators = new Map<string, () => void>();
 
@@ -196,13 +240,16 @@ export default function (pi: ExtensionAPI) {
   const groupToolCalls = (message: AssistantMessage) => {
     readGroups.push(...getToolCallGroups(message, "read"));
     bashGroups.push(...getToolCallGroups(message, "bash"));
+    writeGroups.push(...getToolCallGroups(message, "write"));
   };
 
   const restoreToolCallGroups = (ctx: ExtensionContext) => {
     readGroups.length = 0;
     bashGroups.length = 0;
+    writeGroups.length = 0;
     readResults.clear();
     bashResults.clear();
+    writeResults.clear();
     clearBashTimers();
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "message" && entry.message.role === "assistant") {
@@ -425,6 +472,86 @@ export default function (pi: ExtensionAPI) {
           }
           bashInvalidators.delete(context.toolCallId);
         }
+        return new Text("", 0, 0);
+      },
+    };
+  });
+
+  pi.registerToolRenderer((toolName, next) => {
+    if (toolName !== "write") {
+      return next();
+    }
+
+    return {
+      renderShell: "self",
+      renderCall(args, theme, context) {
+        const fallbackCall = {
+          type: "toolCall",
+          id: context.toolCallId,
+          name: "write",
+          arguments: args,
+        } as ToolCall;
+        return {
+          invalidate() {},
+          render(width: number) {
+            const group = writeGroups.find((calls) => calls.some((call) => call.id === context.toolCallId));
+            if (group !== undefined && group[0]?.id !== context.toolCallId) {
+              return [];
+            }
+
+            const calls = group ?? [fallbackCall];
+            const lines: string[] = [];
+            for (const call of calls) {
+              const result = writeResults.get(call.id);
+              lines.push(renderWriteCall(call, result, theme, context.cwd, width));
+              const content = (call.arguments as Partial<WriteToolInput>).content;
+              const path = (call.arguments as Partial<WriteToolInput>).path ?? "";
+              if (content !== undefined && content !== "") {
+                const contentLines = content.split(/\r?\n/);
+                while (contentLines.length > 1 && contentLines[contentLines.length - 1] === "") {
+                  contentLines.pop();
+                }
+                const hiddenLines = contentLines.length - WRITE_PREVIEW_LINES;
+                let visibleLines = contentLines;
+                if (!context.expanded) {
+                  visibleLines = contentLines.slice(0, WRITE_PREVIEW_LINES);
+                }
+                lines.push(...renderToolOutput(visibleLines.join("\n"), path, theme, width));
+                if (!context.expanded && hiddenLines > 0) {
+                  lines.push(
+                    theme.fg("muted", `     ... ${hiddenLines} more lines`) + renderExpandHint(theme),
+                  );
+                }
+              }
+            }
+            return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
+          },
+        };
+      },
+      renderResult(result, options, _theme, context) {
+        let status: string;
+        if (options.isPartial) {
+          status = "running";
+        } else if (context.isError) {
+          status = "failed";
+        } else {
+          status = "complete";
+        }
+        const output = result.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join("\n");
+        const writeResult: ToolCallResult = { status };
+        if (context.isError) {
+          const errorMessage = output
+            .split(/\r?\n/)
+            .find((line) => line.trim() !== "")
+            ?.trim();
+          if (errorMessage !== undefined) {
+            writeResult.error = errorMessage;
+          }
+        }
+        writeResults.set(context.toolCallId, writeResult);
         return new Text("", 0, 0);
       },
     };
