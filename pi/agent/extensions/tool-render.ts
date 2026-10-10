@@ -388,11 +388,15 @@ export default function (pi: ExtensionAPI) {
         const bashState = context.state as { startedAt?: number };
         const startedAt = previousResult?.startedAt ?? bashState.startedAt;
         const bashResult: ToolCallResult = { status };
-        if (status === "running" && startedAt !== undefined) {
-          bashResult.startedAt = startedAt;
+        if (status === "running") {
+          if (startedAt !== undefined) {
+            bashResult.startedAt = startedAt;
+          }
         } else if (context.durationMs !== undefined) {
           bashResult.durationMs = context.durationMs;
-        } else if (status !== "running" && startedAt !== undefined) {
+        } else if (previousResult?.durationMs !== undefined) {
+          bashResult.durationMs = previousResult.durationMs;
+        } else if (startedAt !== undefined && (previousResult === undefined || previousResult.status === "running")) {
           bashResult.durationMs = Date.now() - startedAt;
         }
         if (!context.isError && output !== "") {
