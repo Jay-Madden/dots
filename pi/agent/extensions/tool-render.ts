@@ -1,6 +1,6 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
+import { getLanguageFromPath, highlightCode, keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi-tui";
 
 const HORIZONTAL_RULE = "\u2500";
@@ -13,6 +13,25 @@ interface ReadResult {
   status: string;
   error?: string;
   output?: string;
+}
+
+export function renderExpandHint(theme: Theme): string {
+  return theme.fg("muted", "   (")
+    + keyHint("app.tools.expand", "to expand")
+    + theme.fg("muted", ")");
+}
+
+function renderReadOutput(output: string, path: string, theme: Theme, width: number): string[] {
+  const language = getLanguageFromPath(path);
+  let lines = output.split("\n");
+  if (language !== undefined) {
+    lines = highlightCode(output, language);
+  } else {
+    lines = lines.map((line) => theme.fg("toolOutput", line));
+  }
+  return new Text(lines.join("\n"), 0, 0)
+    .render(Math.max(1, width - 3))
+    .map((line) => `   ${line}`);
 }
 
 function getReadCallGroups(message: AssistantMessage): ToolCall[][] {
@@ -161,17 +180,13 @@ export default function (pi: ExtensionAPI) {
               const result = readResults.get(call.id);
               lines.push(renderReadCall(call, result, theme, context.cwd, width));
               if (context.expanded && result?.output) {
-                const outputLines = new Text(result.output, 0, 0).render(Math.max(1, width - 3));
-                lines.push(...outputLines.map((line) => theme.fg("toolOutput", `   ${line}`)));
+                const path = (call.arguments as { path?: string }).path ?? "";
+                lines.push(...renderReadOutput(result.output, path, theme, width));
               }
             }
 
             if (!context.expanded) {
-              lines.push(
-                theme.fg("dim", "   (")
-                  + keyHint("app.tools.expand", "to expand")
-                  + theme.fg("dim", ")"),
-              );
+              lines.push(renderExpandHint(theme));
             }
             return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
           },
@@ -190,8 +205,9 @@ export default function (pi: ExtensionAPI) {
           .filter((part) => part.type === "text")
           .map((part) => part.text ?? "")
           .join("\n");
+
         const readResult: ReadResult = { status };
-        if (output !== "") {
+        if (!context.isError && output !== "") {
           readResult.output = output;
         }
         if (context.isError) {
