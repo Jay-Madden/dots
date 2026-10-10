@@ -1,7 +1,9 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
+import { readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { getLanguageFromPath, highlightCode, keyHint, type BashToolInput, type ExtensionAPI, type ExtensionContext, type Theme, type WriteToolInput } from "@earendil-works/pi-coding-agent";
+import { generateDiffString, getLanguageFromPath, highlightCode, keyHint, renderDiff, type BashToolInput, type EditToolInput, type ExtensionAPI, type ExtensionContext, type Theme, type WriteToolInput } from "@earendil-works/pi-coding-agent";
 import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { applyEditsToNormalizedContent, normalizeToLF, stripBom } from "./vendor/edit-diff.ts";
 
 const HORIZONTAL_RULE = "\u2500";
 const STATUS_CIRCLE = "\u25cf";
@@ -17,6 +19,11 @@ interface ToolCallResult {
   startedAt?: number;
   error?: string;
   output?: string;
+  diff?: string;
+}
+interface EditPreviewState {
+  diff?: string;
+  error?: string;
 }
 
 export function renderExpandHint(theme: Theme): string {
@@ -126,6 +133,74 @@ function renderBashCall(
   return lines.map((line) => truncateToWidth(line, width));
 }
 
+function renderEditCall(
+  editCall: ToolCall,
+  result: ToolCallResult | undefined,
+  theme: Theme,
+  cwd: string,
+  width: number,
+): string {
+  const args = (editCall.arguments ?? {}) as Partial<EditToolInput>;
+  const rawPath = args.path ?? "?";
+  const resolvedPath = resolve(cwd, rawPath);
+  const relativePath = relative(cwd, resolvedPath);
+  let path = rawPath;
+  if (!isAbsolute(relativePath) && relativePath !== ".." && !relativePath.startsWith(`..${sep}`)) {
+    path = relativePath || ".";
+  }
+
+  const lighterError = mixColors(theme.colors.error, ERROR_RED, ERROR_LIGHTENING);
+  let status = "pending";
+  if (result !== undefined) {
+    status = result.status;
+  }
+  let indicator = theme.fg("text", PENDING_CIRCLE);
+  let statusText = "";
+  if (status === "complete") {
+    indicator = theme.fg("success", STATUS_CIRCLE);
+  } else if (status === "failed") {
+    indicator = theme.style(STATUS_CIRCLE, { fg: lighterError });
+    let errorMessage = result?.error;
+    if (errorMessage === undefined) {
+      errorMessage = "edit failed";
+    }
+    statusText = ` ${theme.style(`${ERROR_SEPARATOR} ${errorMessage}`, { fg: lighterError })}`;
+  } else if (status === "running") {
+    statusText = ` ${theme.fg("warning", status)}`;
+  } else {
+    statusText = ` ${theme.fg("muted", status)}`;
+  }
+  const label = ` ${indicator} ${theme.fg("toolTitle", "edit")} ${theme.fg("accent", path)}${statusText}`;
+  return truncateToWidth(label, width);
+}
+
+function renderEditDiff(diff: string, width: number): string[] {
+  return new Text(renderDiff(diff), 0, 0)
+    .render(Math.max(1, width - 5))
+    .map((line) => `     ${line}`);
+}
+
+async function computePendingEditDiff(
+  path: string,
+  edits: EditToolInput["edits"],
+  cwd: string,
+): Promise<{ diff: string } | { error: string }> {
+  let original: string;
+  try {
+    original = await readFile(resolve(cwd, path), "utf8");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  const { text } = stripBom(original);
+  try {
+    const { baseContent, newContent } = applyEditsToNormalizedContent(normalizeToLF(text), edits, path);
+    return { diff: generateDiffString(baseContent, newContent).diff };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 function renderWriteCall(
   writeCall: ToolCall,
   result: ToolCallResult | undefined,
@@ -223,9 +298,12 @@ export default function (pi: ExtensionAPI) {
   const readGroups: ToolCall[][] = [];
   const bashGroups: ToolCall[][] = [];
   const writeGroups: ToolCall[][] = [];
+  const editGroups: ToolCall[][] = [];
   const readResults = new Map<string, ToolCallResult>();
   const bashResults = new Map<string, ToolCallResult>();
   const writeResults = new Map<string, ToolCallResult>();
+  const editResults = new Map<string, ToolCallResult>();
+  const editPreviews = new Map<string, EditPreviewState>();
   const bashTimers = new Map<string, ReturnType<typeof setInterval>>();
   const bashInvalidators = new Map<string, () => void>();
 
@@ -241,15 +319,19 @@ export default function (pi: ExtensionAPI) {
     readGroups.push(...getToolCallGroups(message, "read"));
     bashGroups.push(...getToolCallGroups(message, "bash"));
     writeGroups.push(...getToolCallGroups(message, "write"));
+    editGroups.push(...getToolCallGroups(message, "edit"));
   };
 
   const restoreToolCallGroups = (ctx: ExtensionContext) => {
     readGroups.length = 0;
     bashGroups.length = 0;
     writeGroups.length = 0;
+    editGroups.length = 0;
     readResults.clear();
     bashResults.clear();
     writeResults.clear();
+    editResults.clear();
+    editPreviews.clear();
     clearBashTimers();
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "message" && entry.message.role === "assistant") {
@@ -458,6 +540,7 @@ export default function (pi: ExtensionAPI) {
             bashResult.error = errorMessage;
           }
         }
+
         bashResults.set(context.toolCallId, bashResult);
         if (status === "running" && startedAt !== undefined) {
           const invalidate = bashInvalidators.get(context.toolCallId);
@@ -506,16 +589,20 @@ export default function (pi: ExtensionAPI) {
               lines.push(renderWriteCall(call, result, theme, context.cwd, width));
               const content = (call.arguments as Partial<WriteToolInput>).content;
               const path = (call.arguments as Partial<WriteToolInput>).path ?? "";
+
               if (content !== undefined && content !== "") {
                 const contentLines = content.split(/\r?\n/);
+
                 while (contentLines.length > 1 && contentLines[contentLines.length - 1] === "") {
                   contentLines.pop();
                 }
+
                 const hiddenLines = contentLines.length - WRITE_PREVIEW_LINES;
                 let visibleLines = contentLines;
                 if (!context.expanded) {
                   visibleLines = contentLines.slice(0, WRITE_PREVIEW_LINES);
                 }
+
                 lines.push(...renderToolOutput(visibleLines.join("\n"), path, theme, width));
                 if (!context.expanded && hiddenLines > 0) {
                   lines.push(
@@ -552,6 +639,93 @@ export default function (pi: ExtensionAPI) {
           }
         }
         writeResults.set(context.toolCallId, writeResult);
+        return new Text("", 0, 0);
+      },
+    };
+  });
+
+  pi.registerToolRenderer((toolName, next) => {
+    if (toolName !== "edit") {
+      return next();
+    }
+
+    return {
+      renderShell: "self",
+      renderCall(args, theme, context) {
+        const fallbackCall = {
+          type: "toolCall",
+          id: context.toolCallId,
+          name: "edit",
+          arguments: args,
+        } as ToolCall;
+        return {
+          invalidate() {},
+          render(width: number) {
+            const group = editGroups.find((calls) => calls.some((call) => call.id === context.toolCallId));
+            if (group !== undefined && group[0]?.id !== context.toolCallId) {
+              return [];
+            }
+
+            const calls = group ?? [fallbackCall];
+            const lines: string[] = [];
+            for (const call of calls) {
+              const result = editResults.get(call.id);
+              lines.push(renderEditCall(call, result, theme, context.cwd, width));
+
+              const argsComplete = call.id !== context.toolCallId || context.argsComplete;
+              if (argsComplete && !editPreviews.has(call.id)) {
+                const input = call.arguments as EditToolInput;
+                editPreviews.set(call.id, {});
+                void computePendingEditDiff(input.path, input.edits, context.cwd).then((preview) => {
+                  editPreviews.set(call.id, preview);
+                  context.invalidate();
+                });
+              }
+
+              const preview = editPreviews.get(call.id);
+              let diff = result?.diff;
+              if (diff === undefined && preview?.diff !== undefined) {
+                diff = preview.diff;
+              }
+              if (diff !== undefined && diff !== "") {
+                lines.push(...renderEditDiff(diff, width));
+              } else if (preview?.error !== undefined) {
+                lines.push(theme.fg("error", `     ${preview.error}`));
+              }
+            }
+            return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
+          },
+        };
+      },
+      renderResult(result, options, _theme, context) {
+        let status: string;
+        if (options.isPartial) {
+          status = "running";
+        } else if (context.isError) {
+          status = "failed";
+        } else {
+          status = "complete";
+        }
+        const output = result.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join("\n");
+        const editResult: ToolCallResult = { status };
+        if (context.isError) {
+          const errorMessage = output
+            .split(/\r?\n/)
+            .find((line) => line.trim() !== "")
+            ?.trim();
+          if (errorMessage !== undefined) {
+            editResult.error = errorMessage;
+          }
+        } else {
+          const details = result.details as { diff?: string } | undefined;
+          if (details?.diff !== undefined) {
+            editResult.diff = details.diff;
+          }
+        }
+        editResults.set(context.toolCallId, editResult);
         return new Text("", 0, 0);
       },
     };
