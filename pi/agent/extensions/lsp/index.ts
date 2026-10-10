@@ -1,3 +1,4 @@
+import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import { readFile, writeFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -6,14 +7,14 @@ import {
   type ExtensionAPI,
   generateDiffString,
   type ExtensionContext,
+  type Theme,
   isReadToolResult,
-  keyHint,
   type ReadToolInput,
   type WriteToolInput,
   renderDiff,
   withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
-import { Container, Text } from "@earendil-works/pi-tui";
+import { Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type {
   Diagnostic,
@@ -26,12 +27,19 @@ import type {
 import { DiagnosticSeverity } from "vscode-languageserver-protocol";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { approval } from "../components/approval.ts";
+import { getToolCallGroups, HORIZONTAL_RULE, PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "../tool-render.ts";
 import {
   commands,
   languageByExtension,
   LspClient,
   type LspLanguage,
 } from "./client.ts";
+
+type LspRendererResult = {
+  status: string;
+  details?: unknown;
+  output: string;
+};
 
 type DiagnosticDetails = {
   serverName: string;
@@ -53,6 +61,75 @@ type DocumentState = {
 const automaticDiagnosticLimit = 10;
 const diagnosticsToolName = "get_diagnostics";
 
+function renderStatusIndicator(theme: Theme, isPartial: boolean, isError: boolean): string {
+  if (isError) {
+    return theme.fg("error", STATUS_CIRCLE);
+  }
+  if (isPartial) {
+    return theme.fg("text", PENDING_CIRCLE);
+  }
+  return theme.fg("success", STATUS_CIRCLE);
+}
+
+function indentLines(text: string): string {
+  return text.split("\n").map((line) => `  ${line}`).join("\n");
+}
+
+function renderLspResultLines(
+  call: ToolCall,
+  result: LspRendererResult,
+  theme: Theme,
+  expanded: boolean,
+  width: number,
+): string[] {
+  const toolName = call.name;
+  if (result.status === "running") {
+    return [];
+  }
+  if (result.status === "failed") {
+    return result.output === ""
+      ? []
+      : new Text(indentLines(theme.fg("error", result.output)), 0, 0).render(width);
+  }
+
+  if (toolName === diagnosticsToolName) {
+    const details = result.details as DiagnosticDetails | undefined;
+    if (details === undefined || details.serverName === undefined) {
+      return [];
+    }
+    const remainingLabel = details.remaining > 0
+      ? ` (${details.remaining} more available)`
+      : "";
+    const label = details.count === 0
+      ? `No ${details.serverName} errors in ${details.file}`
+      : `${details.serverName}: ${details.count} error${details.count === 1 ? "" : "s"} in ${details.file}${remainingLabel}`;
+    const summary = theme.fg(details.count > 0 ? "error" : "muted", label);
+    const diagnostics = expanded && details.diagnostics !== ""
+      ? `\n${theme.fg("dim", details.diagnostics)}`
+      : "";
+    const hint = expanded ? "" : renderExpandHint(theme);
+    return new Text(indentLines(`${summary}${hint}${diagnostics}`), 0, 0).render(width);
+  }
+
+  const details = result.details as {
+    diff?: string;
+    fileCount?: number;
+    symbol?: string;
+  } | undefined;
+  if (details === undefined || details.fileCount === undefined) {
+    return result.output === ""
+      ? []
+      : new Text(indentLines(theme.fg("toolOutput", result.output)), 0, 0).render(width);
+  }
+  const callArgs = (call.arguments ?? {}) as { newName?: string };
+  const rename = `${details.symbol ?? "symbol"} \u2192 ${callArgs.newName ?? ""}`;
+  const files = `${details.fileCount} file${details.fileCount === 1 ? "" : "s"} changed`;
+  const summary = `${theme.fg("accent", rename)}\n${theme.fg("muted", files)}`;
+  const hint = expanded ? "" : renderExpandHint(theme);
+  const diff = expanded && details.diff ? `\n${renderDiff(details.diff)}` : "";
+  return new Text(indentLines(`${summary}${hint}${diff}`), 0, 0).render(width);
+}
+
 export default function (pi: ExtensionAPI) {
   const clients: LspClient[] = [];
   let cwd: string | undefined;
@@ -60,6 +137,87 @@ export default function (pi: ExtensionAPI) {
   const published = new Map<string, string>();
 
   const showAllRequests = new Set<string>();
+  const renameGroups: ToolCall[][] = [];
+  const diagnosticsGroups: ToolCall[][] = [];
+  const lspResults = new Map<string, LspRendererResult>();
+
+  const groupToolCalls = (message: AssistantMessage) => {
+    renameGroups.push(...getToolCallGroups(message, "rename_symbol"));
+    diagnosticsGroups.push(...getToolCallGroups(message, diagnosticsToolName));
+  };
+
+  const restoreToolCallGroups = (ctx: ExtensionContext) => {
+    renameGroups.length = 0;
+    diagnosticsGroups.length = 0;
+    lspResults.clear();
+    for (const entry of ctx.sessionManager.getBranch()) {
+      if (entry.type === "message" && entry.message.role === "assistant") {
+        groupToolCalls(entry.message);
+      }
+    }
+  };
+
+  pi.on("session_start", (_event, ctx) => restoreToolCallGroups(ctx));
+  pi.on("session_tree", (_event, ctx) => restoreToolCallGroups(ctx));
+  pi.on("message_end", (event) => {
+    if (event.message.role === "assistant") {
+      groupToolCalls(event.message);
+    }
+  });
+
+  const renderCallGroup = (
+    toolName: string,
+    args: unknown,
+    theme: Theme,
+    context: { toolCallId: string; expanded: boolean },
+  ): Component => {
+    const fallbackCall = {
+      type: "toolCall",
+      id: context.toolCallId,
+      name: toolName,
+      arguments: args,
+    } as ToolCall;
+    return {
+      invalidate() {},
+      render(width: number) {
+        const groups = toolName === "rename_symbol" ? renameGroups : diagnosticsGroups;
+        const group = groups.find((calls) => calls.some((call) => call.id === context.toolCallId));
+        if (group !== undefined && group[0]?.id !== context.toolCallId) {
+          return [];
+        }
+        const lines: string[] = [];
+        for (const call of group ?? [fallbackCall]) {
+          const result = lspResults.get(call.id);
+          const callArgs = (call.arguments ?? {}) as Record<string, unknown>;
+          const indicator = renderStatusIndicator(
+            theme,
+            result === undefined || result.status === "running",
+            result?.status === "failed",
+          );
+          const title = theme.fg("toolTitle", theme.bold(toolName));
+          const target = toolName === "rename_symbol"
+            ? `${String(callArgs.path ?? "?")}:${String(callArgs.line ?? "?")}:${String(callArgs.column ?? "?")}`
+              + ` ${String(callArgs.newName ?? "")}`
+            : String(callArgs.path ?? "?");
+          lines.push(truncateToWidth(` ${indicator} ${title} ${theme.fg("accent", target)}`, width));
+          if (result !== undefined) {
+            lines.push(...renderLspResultLines(call, result, theme, context.expanded, width));
+          }
+        }
+        return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
+      },
+    };
+  };
+
+  const storeLspResult = (
+    toolCallId: string,
+    status: string,
+    details: unknown,
+    output: string,
+  ): Text => {
+    lspResults.set(toolCallId, { status, details, output });
+    return new Text("", 0, 0);
+  };
 
   pi.registerTool({
     name: "rename_symbol",
@@ -71,6 +229,10 @@ export default function (pi: ExtensionAPI) {
       column: Type.Integer({ minimum: 1 }),
       newName: Type.String(),
     }),
+    renderShell: "self",
+    renderCall(args, theme, context) {
+      return renderCallGroup("rename_symbol", args, theme, context);
+    },
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const path = params.path.replace(/^@/, "");
       const file = resolve(ctx.cwd, path);
@@ -174,26 +336,13 @@ export default function (pi: ExtensionAPI) {
         details: { diff: diffs.join("\n"), editCount, fileCount: changes.length, symbol },
       };
     },
-    renderResult(result, options, theme, context) {
-      if (options.isPartial || result.details === undefined) {
-        return new Container();
-      }
-      const details = result.details as {
-        diff: string;
-        fileCount: number;
-        symbol?: string;
-      };
-      const rename = `${details.symbol ?? "symbol"} \u2192 ${context.args.newName}`;
-      const expandHint = options.expanded
-        ? ""
-        : ` (${keyHint("app.tools.expand", "to expand")})`;
-      const files = `${details.fileCount} file${details.fileCount === 1 ? "" : "s"} changed${expandHint}`;
-      const diff = options.expanded ? `\n\n${renderDiff(details.diff)}` : "";
-      return new Text(
-        `${theme.fg("accent", rename)}\n${theme.fg("muted", files)}${diff}`,
-        0,
-        0,
-      );
+    renderResult(result, options, _theme, context) {
+      const status = options.isPartial ? "running" : context.isError ? "failed" : "complete";
+      const output = result.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text ?? "")
+        .join("\n");
+      return storeLspResult(context.toolCallId, status, result.details, output);
     },
   });
 
@@ -239,6 +388,10 @@ export default function (pi: ExtensionAPI) {
         description: "File path relative to the current working directory",
       }),
     }),
+    renderShell: "self",
+    renderCall(args, theme, context) {
+      return renderCallGroup(diagnosticsToolName, args, theme, context);
+    },
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const path = params.path.replace(/^@/, "");
       const language = languageByExtension[extname(path).toLowerCase()];
@@ -289,12 +442,13 @@ export default function (pi: ExtensionAPI) {
         details: { path, version: document.version },
       };
     },
-    renderCall(args, theme) {
-      return new Text(
-        `${theme.fg("accent", diagnosticsToolName)}\n${theme.fg("muted", args.path)}`,
-        0,
-        0,
-      );
+    renderResult(result, options, _theme, context) {
+      const status = options.isPartial ? "running" : context.isError ? "failed" : "complete";
+      const output = result.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text ?? "")
+        .join("\n");
+      return storeLspResult(context.toolCallId, status, result.details, output);
     },
   });
 

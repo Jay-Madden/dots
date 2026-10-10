@@ -5,7 +5,7 @@ import { generateDiffString, getLanguageFromPath, highlightCode, keyHint, render
 import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { applyEditsToNormalizedContent, normalizeToLF, stripBom } from "./vendor/edit-diff.ts";
 
-const HORIZONTAL_RULE = "\u2500";
+export const HORIZONTAL_RULE = "\u2500";
 export const STATUS_CIRCLE = "\u25cf";
 export const PENDING_CIRCLE = "\u25cb";
 const ERROR_SEPARATOR = "\u2014";
@@ -45,7 +45,7 @@ function renderToolOutput(output: string, path: string, theme: Theme, width: num
     .map((line) => `     ${line}`);
 }
 
-function getToolCallGroups(message: AssistantMessage, toolName: string): ToolCall[][] {
+export function getToolCallGroups(message: AssistantMessage, toolName: string): ToolCall[][] {
   const groups: ToolCall[][] = [];
   let currentGroup: ToolCall[] | undefined;
 
@@ -687,10 +687,8 @@ export default function (pi: ExtensionAPI) {
               if (diff === undefined && preview?.diff !== undefined) {
                 diff = preview.diff;
               }
-              if (diff !== undefined && diff !== "") {
+              if (result?.status !== "failed" && diff !== undefined && diff !== "") {
                 lines.push(...renderEditDiff(diff, width));
-              } else if (preview?.error !== undefined) {
-                lines.push(theme.fg("error", `     ${preview.error}`));
               }
             }
             return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];

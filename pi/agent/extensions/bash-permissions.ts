@@ -3,11 +3,11 @@ import { createRequire } from "node:module";
 import {
   highlightCode,
   isToolCallEventType,
-  keyHint,
   type BashToolInput,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { approval } from "./components/approval.ts";
+import { PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "./tool-render.ts";
 import { Type } from "typebox";
 import { Text } from "@earendil-works/pi-tui";
 import { Language, Parser, Query, type Node } from "web-tree-sitter";
@@ -416,6 +416,16 @@ export default function (pi: ExtensionAPI) {
     label: "Bash Permission State",
     description: "Load the current bash extension allowlist and approval rules on demand",
     parameters: Type.Object({}),
+    renderShell: "self",
+    renderCall(_args, theme, context) {
+      let indicator = theme.fg("text", PENDING_CIRCLE);
+      if (context.isError) {
+        indicator = theme.fg("error", STATUS_CIRCLE);
+      } else if (!context.isPartial) {
+        indicator = theme.fg("success", STATUS_CIRCLE);
+      }
+      return new Text(`${indicator} ${theme.fg("toolTitle", theme.bold(bashPermissionStateToolName))}`, 0, 0);
+    },
     async execute() {
       const bashRules = renderAllowedCommandRules(allowedCommands);
       return {
@@ -426,15 +436,20 @@ export default function (pi: ExtensionAPI) {
         details: { ruleCount: bashRules.length },
       };
     },
-    renderResult(result, { expanded }, theme) {
+    renderResult(result, { expanded, isPartial }, theme) {
+      if (isPartial) {
+        return new Text(theme.fg("muted", "Loading bash permission rules..."), 0, 0);
+      }
       const ruleCount = result.details?.ruleCount ?? 0;
-      const text = expanded
-        ? renderBashPermissionPrompt(allowedCommands)
-        : theme.fg(
-          "muted",
-          `Loaded ${ruleCount} bash permission rules (${keyHint("app.tools.expand", "to expand")})`,
-        );
-      return new Text(text, 0, 0);
+      const summary = theme.fg("muted", `Loaded ${ruleCount} bash permission rules`);
+      if (!expanded) {
+        return new Text(`  ${summary}${renderExpandHint(theme)}`, 0, 0);
+      }
+      const details = renderBashPermissionPrompt(allowedCommands)
+        .split("\n")
+        .map((line) => `  ${line}`)
+        .join("\n");
+      return new Text(`  ${summary}\n${theme.fg("toolOutput", details)}`, 0, 0);
     },
   });
 
