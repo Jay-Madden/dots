@@ -35,26 +35,25 @@ function renderReadOutput(output: string, path: string, theme: Theme, width: num
 }
 
 function getReadCallGroups(message: AssistantMessage): ToolCall[][] {
-  const groups = message.content.reduce<ToolCall[][]>((groups, block) => {
-    const lastGroup = groups[groups.length - 1];
+  const groups: ToolCall[][] = [];
+  let currentGroup: ToolCall[] | undefined;
+
+  for (const block of message.content) {
     if (block.type !== "toolCall") {
-      return groups;
+      continue;
     }
     if (block.name !== "read") {
-      if (lastGroup && lastGroup.length > 0) {
-        groups.push([]);
-      }
-      return groups;
+      currentGroup = undefined;
+      continue;
     }
-    if (lastGroup && lastGroup.length > 0) {
-      lastGroup.push(block as ToolCall);
-    } else {
-      groups.push([block as ToolCall]);
+    if (currentGroup === undefined) {
+      currentGroup = [];
+      groups.push(currentGroup);
     }
-    return groups;
-  }, []);
+    currentGroup.push(block as ToolCall);
+  }
 
-  return groups.filter((group) => group.length > 0);
+  return groups;
 }
 
 function renderReadCall(
@@ -88,30 +87,22 @@ function renderReadCall(
   if (result !== undefined) {
     status = result.status;
   }
-  let color: "muted" | "success" | "error" | "warning" = "muted";
-  if (status === "complete") {
-    color = "success";
-  } else if (status === "failed") {
-    color = "error";
-  } else if (status === "running") {
-    color = "warning";
-  }
 
   let indicator = theme.fg("text", PENDING_CIRCLE);
+  let statusText = "";
   if (status === "complete") {
     indicator = theme.fg("success", STATUS_CIRCLE);
   } else if (status === "failed") {
     indicator = theme.style(STATUS_CIRCLE, { fg: lighterError });
-  }
-  let statusText = ` ${theme.fg(color, status)}`;
-  if (status === "complete") {
-    statusText = "";
-  } else if (status === "failed") {
     let errorMessage = result?.error;
     if (errorMessage === undefined) {
       errorMessage = "read failed";
     }
     statusText = ` ${theme.style(`${ERROR_SEPARATOR} ${errorMessage}`, { fg: lighterError })}`;
+  } else if (status === "running") {
+    statusText = ` ${theme.fg("warning", status)}`;
+  } else {
+    statusText = ` ${theme.fg("muted", status)}`;
   }
   const label = ` ${indicator} ${theme.fg("toolTitle", "read")} ${theme.fg("accent", path)}${theme.fg("dim", lineRange)}${statusText}`;
   return truncateToWidth(label, width);
@@ -176,6 +167,7 @@ export default function (pi: ExtensionAPI) {
 
             const calls = group ?? [fallbackCall];
             const lines: string[] = [];
+
             for (const call of calls) {
               const result = readResults.get(call.id);
               lines.push(renderReadCall(call, result, theme, context.cwd, width));
