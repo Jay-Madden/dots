@@ -7,7 +7,7 @@ import {
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { approval } from "./components/approval.ts";
-import { PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "./tool-render.ts";
+import { HORIZONTAL_RULE, PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "./tool-render.ts";
 import { Type } from "typebox";
 import { Text } from "@earendil-works/pi-tui";
 import { Language, Parser, Query, type Node } from "web-tree-sitter";
@@ -424,7 +424,13 @@ export default function (pi: ExtensionAPI) {
       } else if (!context.isPartial) {
         indicator = theme.fg("success", STATUS_CIRCLE);
       }
-      return new Text(`${indicator} ${theme.fg("toolTitle", theme.bold(bashPermissionStateToolName))}`, 0, 0);
+      const text = `${indicator} ${theme.fg("toolTitle", theme.bold(bashPermissionStateToolName))}`;
+      return {
+        invalidate() {},
+        render(width: number) {
+          return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...new Text(text, 0, 0).render(width)];
+        },
+      };
     },
     async execute() {
       const bashRules = renderAllowedCommandRules(allowedCommands);

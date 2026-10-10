@@ -7,7 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "./tool-render.ts";
+import { HORIZONTAL_RULE, PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "./tool-render.ts";
 
 const providerId = "exa";
 const defaultBaseUrl = "https://api.exa.ai";
@@ -70,7 +70,12 @@ export default function (pi: ExtensionAPI) {
       }
       const text = `${indicator} ${theme.fg("toolTitle", theme.bold("web_search"))}`
         + ` ${theme.fg("accent", `"${args.query}"`)}`;
-      return new Text(text, 0, 0);
+      return {
+        invalidate() {},
+        render(width: number) {
+          return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...new Text(text, 0, 0).render(width)];
+        },
+      };
     },
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const auth = await ctx.modelRegistry.getProviderAuth(providerId);
