@@ -3,11 +3,11 @@ import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   formatSize,
-  keyHint,
   truncateHead,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "./tool-render.ts";
 
 const providerId = "exa";
 const defaultBaseUrl = "https://api.exa.ai";
@@ -60,9 +60,16 @@ export default function (pi: ExtensionAPI) {
         description: "Maximum search results (default: 5)",
       })),
     }),
-    renderCall(args, theme) {
-      const text = theme.fg("toolTitle", theme.bold("web_search "))
-        + theme.fg("accent", `"${args.query}"`);
+    renderShell: "self",
+    renderCall(args, theme, context) {
+      let indicator = theme.fg("text", PENDING_CIRCLE);
+      if (context.isError) {
+        indicator = theme.fg("error", STATUS_CIRCLE);
+      } else if (!context.isPartial) {
+        indicator = theme.fg("success", STATUS_CIRCLE);
+      }
+      const text = `${indicator} ${theme.fg("toolTitle", theme.bold("web_search"))}`
+        + ` ${theme.fg("accent", `"${args.query}"`)}`;
       return new Text(text, 0, 0);
     },
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -114,23 +121,23 @@ export default function (pi: ExtensionAPI) {
       }
 
       const details = result.details as WebSearchDetails | undefined;
-      if (!expanded) {
-        const resultCount = details?.resultCount ?? 0;
-        const resultLabel = `${resultCount} result${resultCount === 1 ? "" : "s"}`;
-        const truncatedLabel = details?.truncated ? " (truncated)" : "";
-        const hint = keyHint("app.tools.expand", "to expand");
-        return new Text(
-          theme.fg("muted", `${resultLabel}${truncatedLabel} (${hint})`),
-          0,
-          0,
-        );
-      }
-
       const content = result.content
         .filter((block): block is { type: "text"; text: string } => block.type === "text")
-        .map((block) => theme.fg("muted", block.text))
+        .map((block) => block.text)
         .join("\n");
-      return new Text(content, 0, 0);
+      if (details === undefined) {
+        return new Text(theme.fg("error", content || "Search failed"), 0, 0);
+      }
+
+      const resultLabel = `${details.resultCount} result${details.resultCount === 1 ? "" : "s"}`
+        + (details.truncated ? " (truncated)" : "");
+      const summary = theme.fg("muted", resultLabel);
+      if (!expanded) {
+        return new Text(`  ${summary}${renderExpandHint(theme)}`, 0, 0);
+      }
+
+      const indentedContent = content.split("\n").map((line) => `  ${line}`).join("\n");
+      return new Text(`  ${summary}\n${theme.fg("toolOutput", indentedContent)}`, 0, 0);
     },
   });
 }

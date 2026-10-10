@@ -6,8 +6,8 @@ import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi
 import { applyEditsToNormalizedContent, normalizeToLF, stripBom } from "./vendor/edit-diff.ts";
 
 const HORIZONTAL_RULE = "\u2500";
-const STATUS_CIRCLE = "\u25cf";
-const PENDING_CIRCLE = "\u25cb";
+export const STATUS_CIRCLE = "\u25cf";
+export const PENDING_CIRCLE = "\u25cb";
 const ERROR_SEPARATOR = "\u2014";
 const ERROR_LIGHTENING = 0.5;
 const ERROR_RED = parseColor("#ff7777");
@@ -177,7 +177,7 @@ function renderEditCall(
 function renderEditDiff(diff: string, width: number): string[] {
   return new Text(renderDiff(diff), 0, 0)
     .render(Math.max(1, width - 5))
-    .map((line) => `     ${line}`);
+    .map((line) => `    ${line}`);
 }
 
 async function computePendingEditDiff(
