@@ -48,9 +48,9 @@ function renderReadCall(
   const startLine = args.offset ?? 1;
   let lineRange = "";
   if (args.offset != null || args.limit != null) {
-    lineRange = `:${startLine}`;
+    lineRange = ` lines ${startLine}..`;
     if (args.limit != null) {
-      lineRange += `-${startLine + args.limit - 1}`;
+      lineRange = ` lines ${startLine}..${startLine + args.limit - 1}`;
     }
   }
 
@@ -58,15 +58,18 @@ function renderReadCall(
   if (status === undefined) {
     status = "pending";
   }
+  let statusLabel = status;
   let color: "muted" | "success" | "error" | "warning" = "muted";
   if (status === "complete") {
+    statusLabel = "ok";
     color = "success";
   } else if (status === "failed") {
+    statusLabel = "error";
     color = "error";
   } else if (status === "running") {
     color = "warning";
   }
-  const label = `${theme.fg("toolTitle", "read")} ${theme.fg("accent", `${path}${lineRange}`)} ${theme.fg(color, status)}`;
+  const label = `${theme.fg("toolTitle", "read")} ${theme.fg("accent", path)}${theme.fg("dim", lineRange)} -> ${theme.fg(color, statusLabel)}`;
   return truncateToWidth(label, width);
 }
 
