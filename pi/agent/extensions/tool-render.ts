@@ -1,9 +1,19 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
+import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi-tui";
 
 const HORIZONTAL_RULE = "\u2500";
+const STATUS_CIRCLE = "\u25cf";
+const PENDING_CIRCLE = "\u25cb";
+const ERROR_SEPARATOR = "\u2014";
+const ERROR_LIGHTENING = 0.5;
+const ERROR_RED = parseColor("#ff7777");
+interface ReadResult {
+  status: string;
+  error?: string;
+  output?: string;
+}
 
 function getReadCallGroups(message: AssistantMessage): ToolCall[][] {
   const groups = message.content.reduce<ToolCall[][]>((groups, block) => {
@@ -30,7 +40,7 @@ function getReadCallGroups(message: AssistantMessage): ToolCall[][] {
 
 function renderReadCall(
   readCall: ToolCall,
-  callStatus: string | undefined,
+  result: ReadResult | undefined,
   theme: Theme,
   cwd: string,
   width: number,
@@ -54,28 +64,43 @@ function renderReadCall(
     }
   }
 
-  let status = callStatus;
-  if (status === undefined) {
-    status = "pending";
+  const lighterError = mixColors(theme.colors.error, ERROR_RED, ERROR_LIGHTENING);
+  let status = "pending";
+  if (result !== undefined) {
+    status = result.status;
   }
-  let statusLabel = status;
   let color: "muted" | "success" | "error" | "warning" = "muted";
   if (status === "complete") {
-    statusLabel = "ok";
     color = "success";
   } else if (status === "failed") {
-    statusLabel = "error";
     color = "error";
   } else if (status === "running") {
     color = "warning";
   }
-  const label = `${theme.fg("toolTitle", "read")} ${theme.fg("accent", path)}${theme.fg("dim", lineRange)} -> ${theme.fg(color, statusLabel)}`;
+
+  let indicator = theme.fg("text", PENDING_CIRCLE);
+  if (status === "complete") {
+    indicator = theme.fg("success", STATUS_CIRCLE);
+  } else if (status === "failed") {
+    indicator = theme.style(STATUS_CIRCLE, { fg: lighterError });
+  }
+  let statusText = ` ${theme.fg(color, status)}`;
+  if (status === "complete") {
+    statusText = "";
+  } else if (status === "failed") {
+    let errorMessage = result?.error;
+    if (errorMessage === undefined) {
+      errorMessage = "read failed";
+    }
+    statusText = ` ${theme.style(`${ERROR_SEPARATOR} ${errorMessage}`, { fg: lighterError })}`;
+  }
+  const label = ` ${indicator} ${theme.fg("toolTitle", "read")} ${theme.fg("accent", path)}${theme.fg("dim", lineRange)}${statusText}`;
   return truncateToWidth(label, width);
 }
 
 export default function (pi: ExtensionAPI) {
   const readGroups: ToolCall[][] = [];
-  const readStatuses = new Map<string, string>();
+  const readResults = new Map<string, ReadResult>();
 
   const rememberReadGroups = (message: AssistantMessage) => {
     readGroups.push(...getReadCallGroups(message));
@@ -83,7 +108,7 @@ export default function (pi: ExtensionAPI) {
 
   const restoreReadGroups = (ctx: ExtensionContext) => {
     readGroups.length = 0;
-    readStatuses.clear();
+    readResults.clear();
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "message" && entry.message.role === "assistant") {
         rememberReadGroups(entry.message);
@@ -131,19 +156,28 @@ export default function (pi: ExtensionAPI) {
             }
 
             const calls = group ?? [fallbackCall];
-            const lines = calls.map((call) => {
-              let status = readStatuses.get(call.id);
-              if (status === undefined && call.id === context.toolCallId) {
-                status = (context.state as { status?: string }).status;
+            const lines: string[] = [];
+            for (const call of calls) {
+              const result = readResults.get(call.id);
+              lines.push(renderReadCall(call, result, theme, context.cwd, width));
+              if (context.expanded && result?.output) {
+                const outputLines = new Text(result.output, 0, 0).render(Math.max(1, width - 3));
+                lines.push(...outputLines.map((line) => theme.fg("toolOutput", `   ${line}`)));
               }
-              return renderReadCall(call, status, theme, context.cwd, width);
-            });
+            }
 
+            if (!context.expanded) {
+              lines.push(
+                theme.fg("dim", "   (")
+                  + keyHint("app.tools.expand", "to expand")
+                  + theme.fg("dim", ")"),
+              );
+            }
             return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
           },
         };
       },
-      renderResult(_result, options, _theme, context) {
+      renderResult(result, options, _theme, context) {
         let status: string;
         if (options.isPartial) {
           status = "running";
@@ -152,7 +186,24 @@ export default function (pi: ExtensionAPI) {
         } else {
           status = "complete";
         }
-        readStatuses.set(context.toolCallId, status);
+        const output = result.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join("\n");
+        const readResult: ReadResult = { status };
+        if (output !== "") {
+          readResult.output = output;
+        }
+        if (context.isError) {
+          const errorMessage = output
+            .split(/\r?\n/)
+            .find((line) => line.trim() !== "")
+            ?.trim();
+          if (errorMessage !== undefined) {
+            readResult.error = errorMessage;
+          }
+        }
+        readResults.set(context.toolCallId, readResult);
         return new Text("", 0, 0);
       },
     };
