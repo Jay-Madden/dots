@@ -87,7 +87,9 @@ function renderBashCall(
   } else if (status === "failed") {
     indicator = theme.style(STATUS_CIRCLE, { fg: lighterError });
     let errorMessage = result?.error;
-    if (errorMessage === undefined) {
+    if (result?.output !== undefined) {
+      errorMessage = "failed";
+    } else if (errorMessage === undefined) {
       errorMessage = "bash failed";
     }
     statusText = ` ${theme.style(`${ERROR_SEPARATOR} ${errorMessage}`, { fg: lighterError })}`;
@@ -528,7 +530,7 @@ export default function (pi: ExtensionAPI) {
         } else if (startedAt !== undefined && (previousResult === undefined || previousResult.status === "running")) {
           bashResult.durationMs = Date.now() - startedAt;
         }
-        if (!context.isError && output !== "") {
+        if (output !== "") {
           bashResult.output = output;
         }
         if (context.isError) {
