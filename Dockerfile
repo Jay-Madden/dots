@@ -108,4 +108,7 @@ COPY --chown=${USERNAME}:${USERNAME} zsh/starship.toml /home/${USERNAME}/.config
 COPY --chown=${USERNAME}:${USERNAME} zellij/config.kdl /home/${USERNAME}/.config/zellij/config.kdl
 COPY --chown=${USERNAME}:${USERNAME} zellij/layouts/container.kdl /home/${USERNAME}/.config/zellij/layouts/container.kdl
 
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/container-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/container-entrypoint"]
 CMD ["zellij", "--layout", "container"]

@@ -8,6 +8,9 @@
 !Dockerfile
 !mac_install.sh
 
+!docker/
+!docker/*
+
 !.github/
 !.github/*
 
