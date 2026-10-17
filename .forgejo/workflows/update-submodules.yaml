@@ -5,6 +5,8 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
+enable-openid-connect: true
+
 jobs:
   update-submodules:
     runs-on: codeberg-tiny-lazy
@@ -12,10 +14,23 @@ jobs:
       contents: write
 
     steps:
+    - name: Get OIDC token
+      id: oidc
+      env:
+        AUDIENCE: u:834738:09e0c27d-213f-4801-804e-306eb49982c6
+      run: |
+        set -euo pipefail
+        response="$(curl --fail --silent --show-error \
+          --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE")"
+        token="$(printf '%s' "$response" | jq --exit-status --raw-output '.value')"
+        echo "::add-mask::$token"
+        echo "token=$token" >> "$FORGEJO_OUTPUT"
+
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ steps.oidc.outputs.token }}
         submodules: true
         fetch-depth: 0
 
