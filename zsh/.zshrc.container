@@ -1,0 +1,9 @@
+source "$HOME/.config/zsh/common.zsh"
+
+zstyle ':omz:update' mode disabled
+setup_omz
+setup_completion
+setup_aliases
+alias vim='nvim'
+setup_zoxide
+setup_starship

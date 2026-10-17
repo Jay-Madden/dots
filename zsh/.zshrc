@@ -3,6 +3,7 @@
 
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
+source "$HOME/.config/zsh/common.zsh"
 
 # Add nvm to path
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
@@ -47,10 +48,6 @@ alias code="/Applications/Visual\ Studio\ Code.app/Contents/Resources/app/bin/co
 export PI_CONFIG_DIR="$HOME/.config/pi"
 export PI_CODING_AGENT_DIR="$HOME/.config/pi/agent"
 
-# zsh-vim configs
-ZVM_VI_INSERT_ESCAPE_BINDKEY=jj
-bindkey -M vicmd "^V" edit-command-line
-
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
@@ -61,10 +58,6 @@ bindkey -M vicmd "^V" edit-command-line
 # SPACESHIP_KUBECTL_SHOW=true
 # SPACESHIP_KUBECTL_CONTEXT_SHOW=true
 # SPACESHIP_KUBECTL_VERSION_SHOW=false
-
-# Initialize starship prompt
-eval "$(starship init zsh)"
-export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
 
 
 # Set list of themes to pick from when loading at random
@@ -127,24 +120,14 @@ COMPLETION_WAITING_DOTS="true"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(
-    git
-    dotnet
-    fzf-tab
-    zsh-autosuggestions
-    zsh-vi-mode
-    zsh-syntax-highlighting
-)
+setup_omz
+setup_starship
 
 # Setup completions
-fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
-source $ZSH/oh-my-zsh.sh
 
 # User configuration
 
 
-# Setup atuin
-eval "$(atuin init zsh)"
 
 # export MANPATH="/usr/local/man:$MANPATH"
 
@@ -165,7 +148,6 @@ eval "$(atuin init zsh)"
 export XDG_CONFIG_HOME="$HOME/.config"
 
 # Set zsh-autosuggestions color style
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=23'
 
 # Set personal aliases, overriding those provided by oh-my-zsh libs,
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
@@ -176,29 +158,14 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=23'
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-# Unbind execute mode
-bindkey -a -r ':'
-# Immediately show completions
-bindkey '\t' menu-complete
-
 # Command Aliases
-
-# Bat config
-export BAT_THEME="1337"
-alias cat='bat --paging=never'
-
-alias c='clear'
-alias python='python3'
-alias h='atuin history list'
-alias cdi='zi'
-alias lg='lazygit'
+setup_aliases
 
 if [[ "$OSTYPE" == darwin* ]]; then
     alias pwdc='pwd | pbcopy'
 fi
 
 # neovim aliases
-alias ovim='/usr/bin/vim'
 vim() {
     local current_dir=$(pwd -P)
     local resumed=0
@@ -342,7 +309,6 @@ killrabbit() {
 }
 
 # Kubernetes aliases
-alias k='kubectl'
 source /opt/homebrew/share/zsh/site-functions/_kubectl
 
 # Simple cluster selector
@@ -367,39 +333,10 @@ fi
 
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 
-if type eza >/dev/null 2>&1; then
-    alias ls='eza -alg --icons --color=always --group-directories-first'
-    alias ll='eza -aliSgh --icons --color=always --group-directories-first'
-    alias lt='eza -@alT --icons --color=always'
-    alias lr='eza -alg --icons --sort=modified --color=always --group-directories-first'
-else
-    alias l='ls -alh --group-directories-first'
-    alias ll='ls -al --group-directories-first'
-    alias lr='ls -ltrh --group-directories-first'
-fi
-
 # Load zoxide
-eval "$(zoxide init zsh)"
+setup_zoxide
 
-# Remove the annoying common prefix tabbing
-setopt menucomplete
-
-# Configure default completion styles for fzf-tab
-# # disable sort when completing `git checkout`
-zstyle ':completion:*:git-checkout:*' sort false
-# NOTE: don't use escape sequences (like '%F{red}%d%f') here, fzf-tab will ignore them
-zstyle ':completion:*:descriptions' format '[%d]'
-# force zsh not to show completion menu, which allows fzf-tab to capture the unambiguous prefix
-zstyle ':completion:*' menu no
-# preview directory's content with eza when completing cd
-zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath'
-# set list-colors to enable filename colorizing
-zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
-# custom fzf flags
-# NOTE: fzf-tab does not follow FZF_DEFAULT_OPTS by default
-zstyle ':fzf-tab:*' fzf-flags --bind=tab:accept --style minimal --bind 'focus:transform-header:file --brief {}'
-# # Enable tmux popup
-zstyle ':fzf-tab:*' fzf-command ftb-tmux-popup
+setup_completion
 
 export EDITOR="nvim"
 

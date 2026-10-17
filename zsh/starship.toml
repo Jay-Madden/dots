@@ -2,6 +2,7 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
+${custom.remote}\
 $directory\
 $git_branch\
 $git_commit\
@@ -13,6 +14,19 @@ $line_break\
 $shell\
 $character\
 """
+
+[custom.remote]
+when = 'test "$DOTFILES_CONTAINER" = "1" || test -n "$SSH_CONNECTION" || test -n "$SSH_TTY"'
+command = '''
+if [ "$DOTFILES_CONTAINER" = "1" ]; then
+    printf 'CONTAINER %s@%s' "$USER" "$(hostname)"
+else
+    printf 'SSH %s@%s' "$USER" "$(hostname)"
+fi
+'''
+shell = ['sh']
+format = '[$output]($style) '
+style = 'bold #C34043'
 
 [cmd_duration]
 disabled = false

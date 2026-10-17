@@ -5,6 +5,7 @@
 !.gitignore
 !README.md
 !Brewfile
+!Dockerfile
 !mac_install.sh
 
 !.github/

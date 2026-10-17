@@ -151,8 +151,8 @@ keybinds clear-defaults=true {
         bind "Alt +" { Resize "Increase"; }
         bind "Alt -" { Resize "Decrease"; }
         bind "Alt =" { Resize "Increase"; }
-        bind "Alt [" { PreviousSwapLayout; }
-        bind "Alt ]" { NextSwapLayout; }
+        bind "Alt [" { FocusHostSession; }
+        bind "Alt ]" { FocusGuestSession; }
         bind "Alt f" { ToggleFloatingPanes; }
         bind "Alt h" { GoToPreviousTab; }
         bind "Alt i" { MoveTab "left"; }
@@ -340,6 +340,7 @@ theme "kanagawa"
 // Default: normal
 //
 default_mode "locked"
+nested_session_handling "descend"
 
 // Choose the path to the default shell that zellij will use for opening new panes
 // Default: $SHELL

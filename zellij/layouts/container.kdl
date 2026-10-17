@@ -1,0 +1,18 @@
+default_shell "/bin/zsh"
+session_name "CONTAINER"
+attach_to_session true
+session_serialization false
+pane_frames true
+pane_frame_style "full"
+
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+    }
+    tab name="shell" {
+        pane
+    }
+}
