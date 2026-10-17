@@ -10,8 +10,6 @@ enable-openid-connect: true
 jobs:
   update-submodules:
     runs-on: codeberg-tiny-lazy
-    permissions:
-      contents: write
 
     steps:
     - name: Get OIDC token
