@@ -69,8 +69,6 @@ impl ZellijPlugin for TabBar {
                     return false;
                 };
 
-                eprintln!("SessionUpdate for current session recieved: ");
-
                 self.set_state_from_session(session);
                 true
             }
@@ -181,7 +179,6 @@ impl ZellijPlugin for TabBar {
             ));
         }
 
-        eprintln!("Rendered tab bar: {output}");
         print!("{output}");
     }
 }
@@ -191,6 +188,10 @@ impl TabBar {
         for tab_view in &mut self.tabs {
             let name = tab_label(tab_view, false);
             if name != tab_view.tab.name {
+                eprintln!(
+                    "dyn-tab rename: plugin={} client={} tab_id={} old={:?} new={:?}",
+                    self.plugin_id, self.client_id, tab_view.tab.tab_id, tab_view.tab.name, name
+                );
                 rename_tab_with_id(tab_view.tab.tab_id as u64, &name);
                 tab_view.tab.name = name;
             }
