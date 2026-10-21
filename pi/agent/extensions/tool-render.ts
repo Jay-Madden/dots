@@ -2,7 +2,7 @@ import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { generateDiffString, getLanguageFromPath, highlightCode, keyHint, renderDiff, type BashToolInput, type EditToolInput, type ExtensionAPI, type ExtensionContext, type Theme, type WriteToolInput } from "@earendil-works/pi-coding-agent";
-import { mixColors, parseColor, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { mixColors, parseColor, Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { applyEditsToNormalizedContent, normalizeToLF, stripBom } from "./vendor/edit-diff.ts";
 
 export const HORIZONTAL_RULE = "\u2500";
@@ -296,18 +296,73 @@ function renderReadCall(
   return truncateToWidth(label, width);
 }
 
+class ReadRow implements Component {
+  result: ToolCallResult | undefined;
+  expanded = false;
+  private cachedWidth: number | undefined;
+  private cachedExpanded: boolean | undefined;
+  private cachedLines: string[] | undefined;
+
+  constructor(public call: ToolCall, public theme: Theme, public cwd: string) {}
+
+  invalidate() {
+    this.cachedLines = undefined;
+  }
+
+  render(width: number): string[] {
+    if (this.cachedLines !== undefined && this.cachedWidth === width && this.cachedExpanded === this.expanded) {
+      return this.cachedLines;
+    }
+
+    const lines = [renderReadCall(this.call, this.result, this.theme, this.cwd, width)];
+    if (this.expanded && this.result?.output) {
+      const path = (this.call.arguments as { path?: string }).path ?? "";
+      lines.push(...renderToolOutput(this.result.output, path, this.theme, width));
+    }
+    this.cachedWidth = width;
+    this.cachedExpanded = this.expanded;
+    this.cachedLines = lines;
+    return lines;
+  }
+}
+
 export default function (pi: ExtensionAPI) {
-  const readGroups: ToolCall[][] = [];
+  const readGroups: ReadRow[][] = [];
   const bashGroups: ToolCall[][] = [];
   const writeGroups: ToolCall[][] = [];
   const editGroups: ToolCall[][] = [];
-  const readResults = new Map<string, ToolCallResult>();
   const bashResults = new Map<string, ToolCallResult>();
   const writeResults = new Map<string, ToolCallResult>();
   const editResults = new Map<string, ToolCallResult>();
   const editPreviews = new Map<string, EditPreviewState>();
   const bashTimers = new Map<string, ReturnType<typeof setInterval>>();
   const bashInvalidators = new Map<string, () => void>();
+
+  const getReadRow = (toolCallId: string): ReadRow | undefined =>
+    readGroups.flat().find((row) => row.call.id === toolCallId);
+
+  const updateReadGroups = (message: AssistantMessage, ctx: ExtensionContext) => {
+    let group: ReadRow[] | undefined;
+    for (const block of message.content) {
+      if (block.type !== "toolCall") {
+        continue;
+      }
+      if (block.name !== "read") {
+        group = undefined;
+        continue;
+      }
+      if (group === undefined) {
+        group = readGroups.find((members) => members[0]?.call.id === block.id);
+        if (group === undefined) {
+          group = [];
+          readGroups.push(group);
+        }
+      }
+      if (!group.some((row) => row.call.id === block.id)) {
+        group.push(new ReadRow(block, ctx.ui.theme, ctx.cwd));
+      }
+    }
+  };
 
   const clearBashTimers = () => {
     for (const timer of bashTimers.values()) {
@@ -317,8 +372,8 @@ export default function (pi: ExtensionAPI) {
     bashInvalidators.clear();
   };
 
-  const groupToolCalls = (message: AssistantMessage) => {
-    readGroups.push(...getToolCallGroups(message, "read"));
+  const groupToolCalls = (message: AssistantMessage, ctx: ExtensionContext) => {
+    updateReadGroups(message, ctx);
     bashGroups.push(...getToolCallGroups(message, "bash"));
     writeGroups.push(...getToolCallGroups(message, "write"));
     editGroups.push(...getToolCallGroups(message, "edit"));
@@ -329,7 +384,6 @@ export default function (pi: ExtensionAPI) {
     bashGroups.length = 0;
     writeGroups.length = 0;
     editGroups.length = 0;
-    readResults.clear();
     bashResults.clear();
     writeResults.clear();
     editResults.clear();
@@ -337,7 +391,7 @@ export default function (pi: ExtensionAPI) {
     clearBashTimers();
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "message" && entry.message.role === "assistant") {
-        groupToolCalls(entry.message);
+        groupToolCalls(entry.message, ctx);
       }
     }
   };
@@ -350,12 +404,18 @@ export default function (pi: ExtensionAPI) {
     restoreToolCallGroups(ctx);
   });
 
-  pi.on("message_end", (event) => {
+  pi.on("message_update", (event, ctx) => {
+    if (event.message.role === "assistant") {
+      updateReadGroups(event.message, ctx);
+    }
+  });
+
+  pi.on("message_end", (event, ctx) => {
     if (event.message.role !== "assistant") {
       return;
     }
 
-    groupToolCalls(event.message);
+    groupToolCalls(event.message, ctx);
   });
 
   pi.registerToolRenderer((toolName, next) => {
@@ -367,30 +427,37 @@ export default function (pi: ExtensionAPI) {
       renderShell: "self",
       renderCall(args, theme, context) {
         const readArgs = args as { path?: string; offset?: number | null; limit?: number | null };
+
         const fallbackCall = {
           type: "toolCall",
           id: context.toolCallId,
           name: "read",
           arguments: readArgs,
         } as ToolCall;
+
+        const row = getReadRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing read row for tool call ${context.toolCallId}`);
+        }
+        row.call = fallbackCall;
+        row.theme = theme;
+        row.cwd = context.cwd;
+        row.invalidate();
+
         return {
-          invalidate() {},
+          invalidate() {
+            row.invalidate();
+          },
           render(width: number) {
-            const group = readGroups.find((calls) => calls.some((call) => call.id === context.toolCallId));
-            if (group !== undefined && group[0]?.id !== context.toolCallId) {
+            const group = readGroups.find((members) => members.includes(row));
+            if (group === undefined || group[0] !== row) {
               return [];
             }
 
-            const calls = group ?? [fallbackCall];
             const lines: string[] = [];
-
-            for (const call of calls) {
-              const result = readResults.get(call.id);
-              lines.push(renderReadCall(call, result, theme, context.cwd, width));
-              if (context.expanded && result?.output) {
-                const path = (call.arguments as { path?: string }).path ?? "";
-                lines.push(...renderToolOutput(result.output, path, theme, width));
-              }
+            for (const member of group) {
+              member.expanded = context.expanded;
+              lines.push(...member.render(width));
             }
 
             if (!context.expanded) {
@@ -400,6 +467,7 @@ export default function (pi: ExtensionAPI) {
           },
         };
       },
+
       renderResult(result, options, _theme, context) {
         let status: string;
         if (options.isPartial) {
@@ -427,7 +495,12 @@ export default function (pi: ExtensionAPI) {
             readResult.error = errorMessage;
           }
         }
-        readResults.set(context.toolCallId, readResult);
+        const row = getReadRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing read row for tool call ${context.toolCallId}`);
+        }
+        row.result = readResult;
+        row.invalidate();
         return new Text("", 0, 0);
       },
     };
