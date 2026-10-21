@@ -16,6 +16,7 @@ struct ViewPane {
 #[derive(Default, Debug)]
 struct ViewTab {
     tab: TabInfo,
+    last_requested_name: Option<String>,
     col: usize,
     width: usize,
     panes: Vec<ViewPane>,
@@ -187,12 +188,17 @@ impl TabBar {
     fn sync_tab_names(&mut self) {
         for tab_view in &mut self.tabs {
             let name = tab_label(tab_view, false);
+            if tab_view.last_requested_name.as_deref() == Some(name.as_str()) {
+                continue;
+            }
+            tab_view.last_requested_name = None;
             if name != tab_view.tab.name {
                 eprintln!(
                     "dyn-tab rename: plugin={} client={} tab_id={} old={:?} new={:?}",
                     self.plugin_id, self.client_id, tab_view.tab.tab_id, tab_view.tab.name, name
                 );
                 rename_tab_with_id(tab_view.tab.tab_id as u64, &name);
+                tab_view.last_requested_name = Some(name.clone());
                 tab_view.tab.name = name;
             }
         }
