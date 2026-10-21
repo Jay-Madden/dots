@@ -369,14 +369,40 @@ class WriteRow implements Component {
   }
 }
 
+class EditRow implements Component {
+  result: ToolCallResult | undefined;
+  preview: EditPreviewState | undefined;
+  private cachedWidth: number | undefined;
+  private cachedLines: string[] | undefined;
+
+  constructor(public call: ToolCall, public theme: Theme, public cwd: string) {}
+
+  invalidate() {
+    this.cachedLines = undefined;
+  }
+
+  render(width: number): string[] {
+    if (this.cachedLines !== undefined && this.cachedWidth === width) {
+      return this.cachedLines;
+    }
+
+    const lines = [renderEditCall(this.call, this.result, this.theme, this.cwd, width)];
+    const diff = this.result?.diff ?? this.preview?.diff;
+    if (this.result?.status !== "failed" && diff !== undefined && diff !== "") {
+      lines.push(...renderEditDiff(diff, width));
+    }
+    this.cachedWidth = width;
+    this.cachedLines = lines;
+    return lines;
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   const readGroups: ReadRow[][] = [];
   const bashGroups: ToolCall[][] = [];
   const writeGroups: WriteRow[][] = [];
-  const editGroups: ToolCall[][] = [];
+  const editGroups: EditRow[][] = [];
   const bashResults = new Map<string, ToolCallResult>();
-  const editResults = new Map<string, ToolCallResult>();
-  const editPreviews = new Map<string, EditPreviewState>();
   const bashTimers = new Map<string, ReturnType<typeof setInterval>>();
   const bashInvalidators = new Map<string, () => void>();
 
@@ -432,6 +458,32 @@ export default function (pi: ExtensionAPI) {
     }
   };
 
+  const getEditRow = (toolCallId: string): EditRow | undefined =>
+    editGroups.flat().find((row) => row.call.id === toolCallId);
+
+  const updateEditGroups = (message: AssistantMessage, ctx: ExtensionContext) => {
+    let group: EditRow[] | undefined;
+    for (const block of message.content) {
+      if (block.type !== "toolCall") {
+        continue;
+      }
+      if (block.name !== "edit") {
+        group = undefined;
+        continue;
+      }
+      if (group === undefined) {
+        group = editGroups.find((members) => members[0]?.call.id === block.id);
+        if (group === undefined) {
+          group = [];
+          editGroups.push(group);
+        }
+      }
+      if (!group.some((row) => row.call.id === block.id)) {
+        group.push(new EditRow(block, ctx.ui.theme, ctx.cwd));
+      }
+    }
+  };
+
   const clearBashTimers = () => {
     for (const timer of bashTimers.values()) {
       clearInterval(timer);
@@ -443,8 +495,8 @@ export default function (pi: ExtensionAPI) {
   const groupToolCalls = (message: AssistantMessage, ctx: ExtensionContext) => {
     updateReadGroups(message, ctx);
     updateWriteGroups(message, ctx);
+    updateEditGroups(message, ctx);
     bashGroups.push(...getToolCallGroups(message, "bash"));
-    editGroups.push(...getToolCallGroups(message, "edit"));
   };
 
   const restoreToolCallGroups = (ctx: ExtensionContext) => {
@@ -453,8 +505,6 @@ export default function (pi: ExtensionAPI) {
     writeGroups.length = 0;
     editGroups.length = 0;
     bashResults.clear();
-    editResults.clear();
-    editPreviews.clear();
     clearBashTimers();
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "message" && entry.message.role === "assistant") {
@@ -475,6 +525,7 @@ export default function (pi: ExtensionAPI) {
     if (event.message.role === "assistant") {
       updateReadGroups(event.message, ctx);
       updateWriteGroups(event.message, ctx);
+      updateEditGroups(event.message, ctx);
     }
   });
 
@@ -794,38 +845,42 @@ export default function (pi: ExtensionAPI) {
           name: "edit",
           arguments: args,
         } as ToolCall;
+
+        const row = getEditRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing edit row for tool call ${context.toolCallId}`);
+        }
+        row.call = fallbackCall;
+        row.theme = theme;
+        row.cwd = context.cwd;
+        row.invalidate();
+
+        if (context.argsComplete && context.isPartial && row.preview === undefined) {
+          const input = row.call.arguments as EditToolInput;
+          row.preview = {};
+          void computePendingEditDiff(input.path, input.edits, context.cwd).then((preview) => {
+            if (getEditRow(context.toolCallId) !== row) {
+              return;
+            }
+            row.preview = preview;
+            row.invalidate();
+            context.invalidate();
+          });
+        }
+
         return {
-          invalidate() {},
+          invalidate() {
+            row.invalidate();
+          },
           render(width: number) {
-            const group = editGroups.find((calls) => calls.some((call) => call.id === context.toolCallId));
-            if (group !== undefined && group[0]?.id !== context.toolCallId) {
+            const group = editGroups.find((members) => members.includes(row));
+            if (group === undefined || group[0] !== row) {
               return [];
             }
 
-            const calls = group ?? [fallbackCall];
             const lines: string[] = [];
-            for (const call of calls) {
-              const result = editResults.get(call.id);
-              lines.push(renderEditCall(call, result, theme, context.cwd, width));
-
-              const argsComplete = call.id !== context.toolCallId || context.argsComplete;
-              if (argsComplete && !editPreviews.has(call.id)) {
-                const input = call.arguments as EditToolInput;
-                editPreviews.set(call.id, {});
-                void computePendingEditDiff(input.path, input.edits, context.cwd).then((preview) => {
-                  editPreviews.set(call.id, preview);
-                  context.invalidate();
-                });
-              }
-
-              const preview = editPreviews.get(call.id);
-              let diff = result?.diff;
-              if (diff === undefined && preview?.diff !== undefined) {
-                diff = preview.diff;
-              }
-              if (result?.status !== "failed" && diff !== undefined && diff !== "") {
-                lines.push(...renderEditDiff(diff, width));
-              }
+            for (const member of group) {
+              lines.push(...member.render(width));
             }
             return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
           },
@@ -859,7 +914,12 @@ export default function (pi: ExtensionAPI) {
             editResult.diff = details.diff;
           }
         }
-        editResults.set(context.toolCallId, editResult);
+        const row = getEditRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing edit row for tool call ${context.toolCallId}`);
+        }
+        row.result = editResult;
+        row.invalidate();
         return new Text("", 0, 0);
       },
     };
