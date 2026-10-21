@@ -296,6 +296,79 @@ function renderReadCall(
   return truncateToWidth(label, width);
 }
 
+class BashRow implements Component {
+  result: ToolCallResult | undefined;
+  expanded = false;
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private onTick: (() => void) | undefined;
+  private cachedWidth: number | undefined;
+  private cachedExpanded: boolean | undefined;
+  private cachedLines: string[] | undefined;
+  private cachedOutput: string | undefined;
+  private cachedOutputWidth: number | undefined;
+  private cachedOutputColor: string | undefined;
+  private cachedOutputLines: string[] | undefined;
+
+  constructor(public call: ToolCall, public theme: Theme) {}
+
+  startTimer(onTick: () => void) {
+    this.onTick = onTick;
+    if (this.timer === undefined) {
+      this.timer = setInterval(() => this.onTick?.(), 1000);
+    }
+  }
+
+  stopTimer() {
+    if (this.timer !== undefined) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
+    this.onTick = undefined;
+  }
+
+  invalidate() {
+    this.cachedLines = undefined;
+  }
+
+  render(width: number): string[] {
+    if (this.cachedLines !== undefined && this.cachedWidth === width && this.cachedExpanded === this.expanded) {
+      return this.cachedLines;
+    }
+
+    const lines = renderBashCall(this.call, this.result, this.theme, width);
+    if (this.result?.output) {
+      // Preserve leading output indentation.
+      const output = this.result.output.replace(/(?:\r?\n)+$/, "");
+      if (output.trim() !== "" && output !== "(no output)") {
+        const color = this.theme.getFgAnsi("toolOutput");
+        if (this.cachedOutputLines === undefined || this.cachedOutput !== output
+          || this.cachedOutputWidth !== width || this.cachedOutputColor !== color) {
+          this.cachedOutputLines = renderToolOutput(output, "", this.theme, width);
+          this.cachedOutput = output;
+          this.cachedOutputWidth = width;
+          this.cachedOutputColor = color;
+        }
+        const outputLines = this.cachedOutputLines;
+        if (this.expanded) {
+          lines.push(...outputLines);
+        } else {
+          const hiddenLines = outputLines.length - BASH_PREVIEW_LINES;
+          if (hiddenLines > 0) {
+            lines.push(
+              this.theme.fg("muted", `     ... ${hiddenLines} earlier lines`) + renderExpandHint(this.theme),
+            );
+          }
+          lines.push(...outputLines.slice(-BASH_PREVIEW_LINES));
+        }
+      }
+    }
+    this.cachedWidth = width;
+    this.cachedExpanded = this.expanded;
+    this.cachedLines = lines;
+    return lines;
+  }
+}
+
 class ReadRow implements Component {
   result: ToolCallResult | undefined;
   expanded = false;
@@ -399,12 +472,9 @@ class EditRow implements Component {
 
 export default function (pi: ExtensionAPI) {
   const readGroups: ReadRow[][] = [];
-  const bashGroups: ToolCall[][] = [];
+  const bashGroups: BashRow[][] = [];
   const writeGroups: WriteRow[][] = [];
   const editGroups: EditRow[][] = [];
-  const bashResults = new Map<string, ToolCallResult>();
-  const bashTimers = new Map<string, ReturnType<typeof setInterval>>();
-  const bashInvalidators = new Map<string, () => void>();
 
   const getReadRow = (toolCallId: string): ReadRow | undefined =>
     readGroups.flat().find((row) => row.call.id === toolCallId);
@@ -484,28 +554,53 @@ export default function (pi: ExtensionAPI) {
     }
   };
 
-  const clearBashTimers = () => {
-    for (const timer of bashTimers.values()) {
-      clearInterval(timer);
+  const getBashRow = (toolCallId: string): BashRow | undefined =>
+    bashGroups.flat().find((row) => row.call.id === toolCallId);
+
+  const updateBashGroups = (message: AssistantMessage, ctx: ExtensionContext) => {
+    let group: BashRow[] | undefined;
+    for (const block of message.content) {
+      if (block.type !== "toolCall") {
+        continue;
+      }
+      if (block.name !== "bash") {
+        group = undefined;
+        continue;
+      }
+      if (group === undefined) {
+        group = bashGroups.find((members) => members[0]?.call.id === block.id);
+        if (group === undefined) {
+          group = [];
+          bashGroups.push(group);
+        }
+      }
+      if (!group.some((row) => row.call.id === block.id)) {
+        group.push(new BashRow(block, ctx.ui.theme));
+      }
     }
-    bashTimers.clear();
-    bashInvalidators.clear();
+  };
+
+  const clearBashTimers = () => {
+    for (const group of bashGroups) {
+      for (const row of group) {
+        row.stopTimer();
+      }
+    }
   };
 
   const groupToolCalls = (message: AssistantMessage, ctx: ExtensionContext) => {
     updateReadGroups(message, ctx);
     updateWriteGroups(message, ctx);
     updateEditGroups(message, ctx);
-    bashGroups.push(...getToolCallGroups(message, "bash"));
+    updateBashGroups(message, ctx);
   };
 
   const restoreToolCallGroups = (ctx: ExtensionContext) => {
+    clearBashTimers();
     readGroups.length = 0;
     bashGroups.length = 0;
     writeGroups.length = 0;
     editGroups.length = 0;
-    bashResults.clear();
-    clearBashTimers();
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "message" && entry.message.role === "assistant") {
         groupToolCalls(entry.message, ctx);
@@ -521,11 +616,14 @@ export default function (pi: ExtensionAPI) {
     restoreToolCallGroups(ctx);
   });
 
+  pi.on("session_shutdown", clearBashTimers);
+
   pi.on("message_update", (event, ctx) => {
     if (event.message.role === "assistant") {
       updateReadGroups(event.message, ctx);
       updateWriteGroups(event.message, ctx);
       updateEditGroups(event.message, ctx);
+      updateBashGroups(event.message, ctx);
     }
   });
 
@@ -633,61 +731,51 @@ export default function (pi: ExtensionAPI) {
     return {
       renderShell: "self",
       renderCall(args, theme, context) {
-        bashInvalidators.set(context.toolCallId, context.invalidate);
-        const bashState = context.state as { startedAt?: number };
-        if (context.executionStarted && bashState.startedAt === undefined) {
-          bashState.startedAt = Date.now();
-        }
-        if (bashState.startedAt !== undefined) {
-          const result = bashResults.get(context.toolCallId);
-          if (result !== undefined) {
-            result.startedAt = bashState.startedAt;
-          } else {
-            bashResults.set(context.toolCallId, { status: "running", startedAt: bashState.startedAt });
-          }
-          if (!bashTimers.has(context.toolCallId)) {
-            bashTimers.set(context.toolCallId, setInterval(() => context.invalidate(), 1000));
-          }
-        }
         const fallbackCall = {
           type: "toolCall",
           id: context.toolCallId,
           name: "bash",
           arguments: args,
         } as ToolCall;
+
+        const row = getBashRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing bash row for tool call ${context.toolCallId}`);
+        }
+        row.call = fallbackCall;
+        row.theme = theme;
+
+        const bashState = context.state as { startedAt?: number };
+        if (context.executionStarted && context.isPartial && bashState.startedAt === undefined) {
+          bashState.startedAt = Date.now();
+        }
+        if (context.isPartial && bashState.startedAt !== undefined) {
+          if (row.result !== undefined) {
+            row.result.startedAt = bashState.startedAt;
+          } else {
+            row.result = { status: "running", startedAt: bashState.startedAt };
+          }
+          row.startTimer(context.invalidate);
+        } else {
+          row.stopTimer();
+        }
+        row.invalidate();
+
         return {
-          invalidate() {},
+          invalidate() {
+            row.invalidate();
+          },
           render(width: number) {
-            const group = bashGroups.find((calls) => calls.some((call) => call.id === context.toolCallId));
-            if (group !== undefined && group[0]?.id !== context.toolCallId) {
+            const group = bashGroups.find((members) => members.includes(row));
+            if (group === undefined || group[0] !== row) {
               return [];
             }
 
-            const calls = group ?? [fallbackCall];
             const lines: string[] = [];
-            for (const call of calls) {
-              const result = bashResults.get(call.id);
-              lines.push(...renderBashCall(call, result, theme, width));
-              if (result?.output) {
-                // Preserve leading output indentation.
-                const output = result.output.replace(/(?:\r?\n)+$/, "");
-                if (output.trim() !== "" && output !== "(no output)") {
-                  const outputLines = renderToolOutput(output, "", theme, width);
-                  if (context.expanded) {
-                    lines.push(...outputLines);
-                  } else {
-                    const hiddenLines = outputLines.length - BASH_PREVIEW_LINES;
-                    if (hiddenLines > 0) {
-                      lines.push(
-                        theme.fg("muted", `     ... ${hiddenLines} earlier lines`) + `${renderExpandHint(theme)}`
-                      );
-                    }
-                    lines.push(...outputLines.slice(-BASH_PREVIEW_LINES));
-                  }
-                }
-              }
+            for (const member of group) {
+              member.expanded = context.expanded;
+              lines.push(...member.render(width));
             }
-
             return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
           },
         };
@@ -707,7 +795,11 @@ export default function (pi: ExtensionAPI) {
           .map((part) => part.text ?? "")
           .join("\n");
 
-        const previousResult = bashResults.get(context.toolCallId);
+        const row = getBashRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing bash row for tool call ${context.toolCallId}`);
+        }
+        const previousResult = row.result;
         const bashState = context.state as { startedAt?: number };
         const startedAt = previousResult?.startedAt ?? bashState.startedAt;
         const bashResult: ToolCallResult = { status };
@@ -735,19 +827,12 @@ export default function (pi: ExtensionAPI) {
           }
         }
 
-        bashResults.set(context.toolCallId, bashResult);
+        row.result = bashResult;
+        row.invalidate();
         if (status === "running" && startedAt !== undefined) {
-          const invalidate = bashInvalidators.get(context.toolCallId);
-          if (invalidate !== undefined && !bashTimers.has(context.toolCallId)) {
-            bashTimers.set(context.toolCallId, setInterval(() => invalidate(), 1000));
-          }
-        } else if (status !== "running") {
-          const timer = bashTimers.get(context.toolCallId);
-          if (timer !== undefined) {
-            clearInterval(timer);
-            bashTimers.delete(context.toolCallId);
-          }
-          bashInvalidators.delete(context.toolCallId);
+          row.startTimer(context.invalidate);
+        } else {
+          row.stopTimer();
         }
         return new Text("", 0, 0);
       },
