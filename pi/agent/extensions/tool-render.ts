@@ -326,13 +326,55 @@ class ReadRow implements Component {
   }
 }
 
+class WriteRow implements Component {
+  result: ToolCallResult | undefined;
+  expanded = false;
+  private cachedWidth: number | undefined;
+  private cachedExpanded: boolean | undefined;
+  private cachedLines: string[] | undefined;
+
+  constructor(public call: ToolCall, public theme: Theme, public cwd: string) {}
+
+  invalidate() {
+    this.cachedLines = undefined;
+  }
+
+  render(width: number): string[] {
+    if (this.cachedLines !== undefined && this.cachedWidth === width && this.cachedExpanded === this.expanded) {
+      return this.cachedLines;
+    }
+
+    const lines = [renderWriteCall(this.call, this.result, this.theme, this.cwd, width)];
+    const content = (this.call.arguments as Partial<WriteToolInput>).content;
+    const path = (this.call.arguments as Partial<WriteToolInput>).path ?? "";
+    if (content !== undefined && content !== "") {
+      const contentLines = content.split(/\r?\n/);
+      while (contentLines.length > 1 && contentLines[contentLines.length - 1] === "") {
+        contentLines.pop();
+      }
+
+      const hiddenLines = contentLines.length - WRITE_PREVIEW_LINES;
+      const visibleLines = this.expanded ? contentLines : contentLines.slice(0, WRITE_PREVIEW_LINES);
+      lines.push(...renderToolOutput(visibleLines.join("\n"), path, this.theme, width));
+      if (!this.expanded && hiddenLines > 0) {
+        lines.push(
+          this.theme.fg("muted", `     ... ${hiddenLines} more lines`) + renderExpandHint(this.theme),
+        );
+      }
+    }
+    this.cachedWidth = width;
+    this.cachedExpanded = this.expanded;
+    this.cachedLines = lines;
+    return lines;
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   const readGroups: ReadRow[][] = [];
   const bashGroups: ToolCall[][] = [];
-  const writeGroups: ToolCall[][] = [];
+  const writeGroups: WriteRow[][] = [];
   const editGroups: ToolCall[][] = [];
   const bashResults = new Map<string, ToolCallResult>();
-  const writeResults = new Map<string, ToolCallResult>();
   const editResults = new Map<string, ToolCallResult>();
   const editPreviews = new Map<string, EditPreviewState>();
   const bashTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -364,6 +406,32 @@ export default function (pi: ExtensionAPI) {
     }
   };
 
+  const getWriteRow = (toolCallId: string): WriteRow | undefined =>
+    writeGroups.flat().find((row) => row.call.id === toolCallId);
+
+  const updateWriteGroups = (message: AssistantMessage, ctx: ExtensionContext) => {
+    let group: WriteRow[] | undefined;
+    for (const block of message.content) {
+      if (block.type !== "toolCall") {
+        continue;
+      }
+      if (block.name !== "write") {
+        group = undefined;
+        continue;
+      }
+      if (group === undefined) {
+        group = writeGroups.find((members) => members[0]?.call.id === block.id);
+        if (group === undefined) {
+          group = [];
+          writeGroups.push(group);
+        }
+      }
+      if (!group.some((row) => row.call.id === block.id)) {
+        group.push(new WriteRow(block, ctx.ui.theme, ctx.cwd));
+      }
+    }
+  };
+
   const clearBashTimers = () => {
     for (const timer of bashTimers.values()) {
       clearInterval(timer);
@@ -374,8 +442,8 @@ export default function (pi: ExtensionAPI) {
 
   const groupToolCalls = (message: AssistantMessage, ctx: ExtensionContext) => {
     updateReadGroups(message, ctx);
+    updateWriteGroups(message, ctx);
     bashGroups.push(...getToolCallGroups(message, "bash"));
-    writeGroups.push(...getToolCallGroups(message, "write"));
     editGroups.push(...getToolCallGroups(message, "edit"));
   };
 
@@ -385,7 +453,6 @@ export default function (pi: ExtensionAPI) {
     writeGroups.length = 0;
     editGroups.length = 0;
     bashResults.clear();
-    writeResults.clear();
     editResults.clear();
     editPreviews.clear();
     clearBashTimers();
@@ -407,6 +474,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("message_update", (event, ctx) => {
     if (event.message.role === "assistant") {
       updateReadGroups(event.message, ctx);
+      updateWriteGroups(event.message, ctx);
     }
   });
 
@@ -649,42 +717,30 @@ export default function (pi: ExtensionAPI) {
           name: "write",
           arguments: args,
         } as ToolCall;
+
+        const row = getWriteRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing write row for tool call ${context.toolCallId}`);
+        }
+        row.call = fallbackCall;
+        row.theme = theme;
+        row.cwd = context.cwd;
+        row.invalidate();
+
         return {
-          invalidate() {},
+          invalidate() {
+            row.invalidate();
+          },
           render(width: number) {
-            const group = writeGroups.find((calls) => calls.some((call) => call.id === context.toolCallId));
-            if (group !== undefined && group[0]?.id !== context.toolCallId) {
+            const group = writeGroups.find((members) => members.includes(row));
+            if (group === undefined || group[0] !== row) {
               return [];
             }
 
-            const calls = group ?? [fallbackCall];
             const lines: string[] = [];
-            for (const call of calls) {
-              const result = writeResults.get(call.id);
-              lines.push(renderWriteCall(call, result, theme, context.cwd, width));
-              const content = (call.arguments as Partial<WriteToolInput>).content;
-              const path = (call.arguments as Partial<WriteToolInput>).path ?? "";
-
-              if (content !== undefined && content !== "") {
-                const contentLines = content.split(/\r?\n/);
-
-                while (contentLines.length > 1 && contentLines[contentLines.length - 1] === "") {
-                  contentLines.pop();
-                }
-
-                const hiddenLines = contentLines.length - WRITE_PREVIEW_LINES;
-                let visibleLines = contentLines;
-                if (!context.expanded) {
-                  visibleLines = contentLines.slice(0, WRITE_PREVIEW_LINES);
-                }
-
-                lines.push(...renderToolOutput(visibleLines.join("\n"), path, theme, width));
-                if (!context.expanded && hiddenLines > 0) {
-                  lines.push(
-                    theme.fg("muted", `     ... ${hiddenLines} more lines`) + renderExpandHint(theme),
-                  );
-                }
-              }
+            for (const member of group) {
+              member.expanded = context.expanded;
+              lines.push(...member.render(width));
             }
             return [theme.fg("dim", HORIZONTAL_RULE.repeat(width)), ...lines];
           },
@@ -713,7 +769,12 @@ export default function (pi: ExtensionAPI) {
             writeResult.error = errorMessage;
           }
         }
-        writeResults.set(context.toolCallId, writeResult);
+        const row = getWriteRow(context.toolCallId);
+        if (row === undefined) {
+          throw new Error(`Missing write row for tool call ${context.toolCallId}`);
+        }
+        row.result = writeResult;
+        row.invalidate();
         return new Text("", 0, 0);
       },
     };
