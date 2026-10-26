@@ -114,11 +114,16 @@ local function render_comments(bufnr)
       local vertical = vim.fn.nr2char(0x2502)
       local winid = vim.fn.bufwinid(bufnr)
       local wininfo = vim.fn.getwininfo(winid)[1]
-      local width = vim.api.nvim_win_get_width(winid) - wininfo.textoff
-      local content_width = math.min(width - 4, math.max(math.floor(width / 2) - 4, vim.fn.strdisplaywidth(text)))
+      local indent = vim.api.nvim_buf_call(bufnr, function()
+        return vim.fn.indent(line_number)
+      end)
+      local leading_padding = string.rep(" ", indent)
+      local width = vim.api.nvim_win_get_width(winid) - wininfo.textoff - indent
+      local content_width = math.max(1, math.min(width - 4, math.max(math.floor(width / 2) - 4, vim.fn.strdisplaywidth(text))))
       local trailing_padding = string.rep(" ", math.max(width - content_width - 4, 0))
       local box_lines = {
         {
+          { leading_padding, "DiffAdd" },
           { vim.fn.nr2char(0x256D) .. string.rep(horizontal, content_width + 2) .. vim.fn.nr2char(0x256E), "DiffCommentBorder" },
           { trailing_padding, "DiffAdd" },
         },
@@ -126,6 +131,7 @@ local function render_comments(bufnr)
       for _, line in ipairs(word_wrap(text, content_width)) do
         local padding = string.rep(" ", math.max(content_width - vim.fn.strdisplaywidth(line), 0))
         table.insert(box_lines, {
+          { leading_padding, "DiffAdd" },
           { vertical, "DiffCommentBorder" },
           { " " .. line .. padding .. " ", "DiffAdd" },
           { vertical, "DiffCommentBorder" },
@@ -133,6 +139,7 @@ local function render_comments(bufnr)
         })
       end
       table.insert(box_lines, {
+        { leading_padding, "DiffAdd" },
         { vim.fn.nr2char(0x2570) .. string.rep(horizontal, content_width + 2) .. vim.fn.nr2char(0x256F), "DiffCommentBorder" },
         { trailing_padding, "DiffAdd" },
       })
