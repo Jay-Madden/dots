@@ -265,6 +265,8 @@ keybinds clear-defaults=true {
         bind "," { SwitchToMode "renametab"; }
         bind "[" { SwitchToMode "scroll"; }
         bind "Ctrl b" { Write 2; SwitchToMode "locked"; }
+        bind "Ctrl u" { HalfPageScrollUp; }
+        bind "Ctrl d" { HalfPageScrollDown; }
         bind "c" { NewTab; SwitchToMode "locked"; }
         bind "h" { MoveFocus "left"; SwitchToMode "locked"; }
         bind "j" { MoveFocus "down"; SwitchToMode "locked"; }
