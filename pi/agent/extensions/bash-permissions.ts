@@ -62,6 +62,7 @@ const allowedCommands = new Set<AllowedCommand>([
   { name: "tr" },
   { name: "sha256sum" },
   { name: "ps" },
+  { name: "sleep" },
   {
     name: "command",
     allowedCommands: new Set([

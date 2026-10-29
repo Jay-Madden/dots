@@ -16,6 +16,7 @@ struct ViewPane {
 #[derive(Default, Debug)]
 struct ViewTab {
     tab: TabInfo,
+    contains_self: bool,
     last_requested_name: Option<String>,
     col: usize,
     width: usize,
@@ -187,6 +188,9 @@ impl ZellijPlugin for TabBar {
 impl TabBar {
     fn sync_tab_names(&mut self) {
         for tab_view in &mut self.tabs {
+            if !tab_view.contains_self {
+                continue;
+            }
             let name = tab_label(tab_view, false);
             if tab_view.last_requested_name.as_deref() == Some(name.as_str()) {
                 continue;
@@ -245,6 +249,13 @@ impl TabBar {
             .map(|session_tab| {
                 // Reuse the cached tab when its id is still there
                 let mut view_tab = cached_tabs.remove(&session_tab.tab_id).unwrap_or_default();
+                view_tab.contains_self = session
+                    .panes
+                    .panes
+                    .get(&session_tab.position)
+                    .into_iter()
+                    .flatten()
+                    .any(|pane| pane.is_plugin && pane.id == self.plugin_id);
 
                 // Index terminal panes so their cached state survives updates
                 let mut cached_panes: HashMap<PaneId, ViewPane> =
