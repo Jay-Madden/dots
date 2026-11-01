@@ -1,6 +1,6 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 import { readFile, writeFile } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { extname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   type EditToolInput,
@@ -27,6 +27,7 @@ import type {
 import { DiagnosticSeverity } from "vscode-languageserver-protocol";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { approval } from "../components/approval.ts";
+import { isWithinDirectory } from "../utils/paths.ts";
 import { getToolCallGroups, HORIZONTAL_RULE, PENDING_CIRCLE, STATUS_CIRCLE, renderExpandHint } from "../tool-render.ts";
 import {
   commands,
@@ -761,14 +762,6 @@ export default function (pi: ExtensionAPI) {
   }
 }
 
-
-function isWithinDirectory(file: string, directory: string): boolean {
-  const relativePath = relative(resolve(directory), resolve(file));
-  return relativePath === "" ||
-    (relativePath !== ".." &&
-      !relativePath.startsWith(`..${sep}`) &&
-      !isAbsolute(relativePath));
-}
 
 function formatDiagnostic(file: string, diagnostic: Diagnostic): string {
   const line = diagnostic.range.start.line + 1;
