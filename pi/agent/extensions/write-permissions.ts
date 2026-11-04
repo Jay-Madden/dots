@@ -15,6 +15,7 @@ import {
   type WriteToolInput,
 } from "@earendil-works/pi-coding-agent";
 import { Box, Key, Markdown, Text } from "@earendil-works/pi-tui";
+import { isWithinDirectory } from "./utils/paths.ts";
 import {
   applyEditsToNormalizedContent,
   normalizeToLF,
@@ -266,7 +267,7 @@ function renderReview(
 }
 
 function hasMultipleChanges(ctx: ExtensionContext, toolCallId: string): boolean {
-  const entry = ctx.sessionManager.getBranch().findLast((entry) =>
+  const entry = ctx.sessionManager.getBranch().slice().reverse().find((entry) =>
     entry.type === "message" && entry.message.role === "assistant",
   );
   if (entry?.type !== "message" || entry.message.role !== "assistant") {
@@ -284,27 +285,27 @@ export default function (pi: ExtensionAPI) {
     await Promise.all([...reviewCleanups].map((cleanup) => cleanup()));
   });
 
-  let approvalsDisabled = false;
+  let autoApproveCwd = false;
   const setApprovalStatus = (ctx: ExtensionContext) => {
-    ctx.ui.setStatus("auto-write", `auto-write:${approvalsDisabled}`);
+    ctx.ui.setStatus("auto-write", `auto-write:${autoApproveCwd ? "cwd" : "off"}`);
   }
 
   const toggleApprovals = (ctx: ExtensionContext) => {
-    approvalsDisabled = !approvalsDisabled;
+    autoApproveCwd = !autoApproveCwd;
     setApprovalStatus(ctx);
     ctx.ui.notify(
-      `Write and edit approvals disabled: ${ctx.ui.theme.fg("toolTitle", String(approvalsDisabled))}`,
+      `Auto-approve writes and edits in cwd: ${ctx.ui.theme.fg("toolTitle", String(autoApproveCwd))}`,
       "info",
     );
   };
 
   pi.on("session_start", (_event, ctx) => {
-    approvalsDisabled = false;
+    autoApproveCwd = false;
     setApprovalStatus(ctx);
   });
 
   pi.registerShortcut(Key.ctrl("a"), {
-    description: "Disable write and edit approvals",
+    description: "Toggle automatic write and edit approval within cwd",
     handler: (ctx) => {
       toggleApprovals(ctx);
     },
@@ -332,7 +333,8 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
-    if (approvalsDisabled) {
+    const withinCwd = isWithinDirectory(resolveToolPath(toolCall.input.path, ctx.cwd), ctx.cwd);
+    if (autoApproveCwd && withinCwd) {
       return undefined;
     }
 
@@ -452,10 +454,10 @@ export default function (pi: ExtensionAPI) {
         [
           {
             key: Key.ctrl("a"),
-            display: "disable approvals",
+            display: autoApproveCwd ? "disable cwd auto-approval" : "allow writes in cwd",
             onSelect: () => {
               toggleApprovals(ctx);
-              return { approved: true };
+              return autoApproveCwd && withinCwd ? { approved: true } : undefined;
             },
           },
           ...(canReview ? [{
