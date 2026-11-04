@@ -60,6 +60,7 @@ type DocumentState = {
 
 const automaticDiagnosticLimit = 10;
 const diagnosticsToolName = "get_diagnostics";
+const renameToolName = "rename_symbol";
 
 function renderStatusIndicator(theme: Theme, isPartial: boolean, isError: boolean): string {
   if (isError) {
@@ -132,6 +133,7 @@ function renderLspResultLines(
 
 export default function (pi: ExtensionAPI) {
   const clients: LspClient[] = [];
+  let enabled = true;
   let cwd: string | undefined;
   const documents = new Map<string, DocumentState>();
   const published = new Map<string, string>();
@@ -141,8 +143,43 @@ export default function (pi: ExtensionAPI) {
   const diagnosticsGroups: ToolCall[][] = [];
   const lspResults = new Map<string, LspRendererResult>();
 
+  pi.registerCommand("lsp", {
+    description: "Toggle LSP for this runtime, or use /lsp on|off|status",
+    getArgumentCompletions: (prefix) => {
+      const matches = ["on", "off", "status"].filter((value) => value.startsWith(prefix));
+      return matches.length > 0 ? matches.map((value) => ({ value, label: value })) : null;
+    },
+    handler: async (args, ctx) => {
+      const action = args.trim().toLowerCase();
+      if (!["", "on", "off", "status"].includes(action)) {
+        ctx.ui.notify("Usage: /lsp [on|off|status]", "warning");
+        return;
+      }
+      if (action === "status") {
+        ctx.ui.notify(`LSP is ${enabled ? "enabled" : "disabled"}`, "info");
+        return;
+      }
+
+      await ctx.waitForIdle();
+      const nextEnabled = action === "" ? !enabled : action === "on";
+      if (nextEnabled !== enabled) {
+        enabled = nextEnabled;
+        const activeTools = pi.getActiveTools().filter(
+          (name) => name !== renameToolName && name !== diagnosticsToolName,
+        );
+        if (enabled) {
+          pi.setActiveTools([...activeTools, renameToolName, diagnosticsToolName]);
+        } else {
+          pi.setActiveTools(activeTools);
+          await stopClients(ctx);
+        }
+      }
+      ctx.ui.notify(`LSP ${enabled ? "enabled" : "disabled"}`, "info");
+    },
+  });
+
   const groupToolCalls = (message: AssistantMessage) => {
-    renameGroups.push(...getToolCallGroups(message, "rename_symbol"));
+    renameGroups.push(...getToolCallGroups(message, renameToolName));
     diagnosticsGroups.push(...getToolCallGroups(message, diagnosticsToolName));
   };
 
@@ -180,7 +217,7 @@ export default function (pi: ExtensionAPI) {
     return {
       invalidate() {},
       render(width: number) {
-        const groups = toolName === "rename_symbol" ? renameGroups : diagnosticsGroups;
+        const groups = toolName === renameToolName ? renameGroups : diagnosticsGroups;
         const group = groups.find((calls) => calls.some((call) => call.id === context.toolCallId));
         if (group !== undefined && group[0]?.id !== context.toolCallId) {
           return [];
@@ -195,7 +232,7 @@ export default function (pi: ExtensionAPI) {
             result?.status === "failed",
           );
           const title = theme.fg("toolTitle", theme.bold(toolName));
-          const target = toolName === "rename_symbol"
+          const target = toolName === renameToolName
             ? `${String(callArgs.path ?? "?")}:${String(callArgs.line ?? "?")}:${String(callArgs.column ?? "?")}`
               + ` ${String(callArgs.newName ?? "")}`
             : String(callArgs.path ?? "?");
@@ -220,7 +257,7 @@ export default function (pi: ExtensionAPI) {
   };
 
   pi.registerTool({
-    name: "rename_symbol",
+    name: renameToolName,
     label: "Rename Symbol",
     description: "Rename a symbol using the language server. The file must have been read first. Line and column are 1-based.",
     parameters: Type.Object({
@@ -231,9 +268,12 @@ export default function (pi: ExtensionAPI) {
     }),
     renderShell: "self",
     renderCall(args, theme, context) {
-      return renderCallGroup("rename_symbol", args, theme, context);
+      return renderCallGroup(renameToolName, args, theme, context);
     },
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      if (!enabled) {
+        throw new Error("LSP is disabled. Run /lsp on to enable it.");
+      }
       const path = params.path.replace(/^@/, "");
       const file = resolve(ctx.cwd, path);
       const language = languageByExtension[extname(path).toLowerCase()];
@@ -303,7 +343,7 @@ export default function (pi: ExtensionAPI) {
         ctx,
         ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Approve rename?")),
         `  ${symbol ?? "symbol"} \u2192 ${params.newName}\n  ${changes.length} file${changes.length === 1 ? "" : "s"} will change`,
-        "rename_symbol was denied by the user",
+        `${renameToolName} was denied by the user`,
       );
       if (!approvalResult.approved) {
         throw new Error(approvalResult.reason);
@@ -393,6 +433,9 @@ export default function (pi: ExtensionAPI) {
       return renderCallGroup(diagnosticsToolName, args, theme, context);
     },
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (!enabled) {
+        throw new Error("LSP is disabled. Run /lsp on to enable it.");
+      }
       const path = params.path.replace(/^@/, "");
       const language = languageByExtension[extname(path).toLowerCase()];
       if (!language) {
@@ -486,7 +529,7 @@ export default function (pi: ExtensionAPI) {
   };
 
   pi.on("tool_result", async (event, ctx) => {
-    if (!isReadToolResult(event) || event.isError) {
+    if (!enabled || !isReadToolResult(event) || event.isError) {
       return undefined;
     }
 
@@ -564,7 +607,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("tool_result", async (event, ctx) => {
-    if (event.isError || !["edit", "write"].includes(event.toolName)) {
+    if (!enabled || event.isError || !["edit", "write"].includes(event.toolName)) {
       return undefined;
     }
 
@@ -598,12 +641,22 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
+    await stopClients(ctx);
+  });
+
+  async function stopClients(ctx: ExtensionContext) {
     for (const active of clients) {
       await active.stop();
-      ctx.ui.setStatus(active.name, undefined);
     }
     clients.length = 0;
-  });
+    for (const command of Object.values(commands)) {
+      ctx.ui.setStatus(command.name, undefined);
+    }
+    documents.clear();
+    published.clear();
+    showAllRequests.clear();
+    cwd = undefined;
+  }
 
   async function syncFile(
     language: LspLanguage,
@@ -640,6 +693,9 @@ export default function (pi: ExtensionAPI) {
     serverName: string,
     params: PublishDiagnosticsParams,
   ) {
+    if (!enabled) {
+      return;
+    }
     if (
       params.version !== undefined &&
       documents.get(params.uri)?.version !== params.version
