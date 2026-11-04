@@ -158,6 +158,25 @@ const allowedCommands = new Set<AllowedCommand>([
       { name: "log", blockedCommands: new Set(["--output"]) },
       { name: "show", blockedCommands: new Set(["--output"]) },
       {
+        name: "remote",
+        allowedCommands: new Set([
+          {
+            name: "-v",
+            blockedCommands: new Set([
+              "add",
+              "rename",
+              "remove",
+              "rm",
+              "set-head",
+              "set-branches",
+              "set-url",
+              "update",
+              "prune",
+            ]),
+          },
+        ]),
+      },
+      {
         name: "branch",
         blockedCommands: new Set([
           "-d",
