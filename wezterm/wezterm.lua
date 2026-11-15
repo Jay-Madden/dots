@@ -19,13 +19,17 @@ local font_name = "JetBrainsMono Nerd Font Mono"
 config.font = wezterm.font_with_fallback({
   {
     family = font_name,
-    weight = "DemiBold",
+    weight = "Bold",
     italic = false,
     harfbuzz_features = {"calt=0", "clig=0", "liga=0"},
   },
   "Apple Color Emoji",
 })
 
+config.font_rules = {
+     { font = config.font },
+ }
+--
 config.cell_width = 1.01
 config.font_size = 13
 
