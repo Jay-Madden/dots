@@ -19,7 +19,7 @@ local font_name = "JetBrainsMono Nerd Font Mono"
 config.font = wezterm.font_with_fallback({
   {
     family = font_name,
-    weight = "Bold",
+    weight = "DemiBold",
     italic = false,
     harfbuzz_features = {"calt=0", "clig=0", "liga=0"},
   },
