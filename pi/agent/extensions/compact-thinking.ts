@@ -1,4 +1,4 @@
-import { getMarkdownTheme, keyHint, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme, keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Key, Markdown, matchesKey } from "@earendil-works/pi-tui";
 
 const COMPACT_LINE_COUNT = 3;
@@ -17,6 +17,20 @@ export default function (pi: ExtensionAPI) {
     endTime: number | null;
   }> = [];
   let elapsedTimer: ReturnType<typeof setInterval> | undefined;
+
+  function stopThinking(ctx: ExtensionContext) {
+    const thinkingBlock = thinkingBlocks.at(-1);
+    if (thinkingBlock !== undefined && thinkingBlock.endTime === null) {
+      thinkingBlock.endTime = Date.now();
+    }
+    if (elapsedTimer !== undefined) {
+      clearInterval(elapsedTimer);
+      elapsedTimer = undefined;
+    }
+    if (ctx.mode === "tui") {
+      ctx.ui.setHiddenThinkingLabel();
+    }
+  }
 
   pi.registerMarkdownTransformer((markdown, { messageType, availableWidth }) => {
     if (messageType !== "assistant-thinking") {
@@ -141,30 +155,23 @@ export default function (pi: ExtensionAPI) {
         if (thinkingBlock.content.join("") === "") {
           thinkingBlock.content.push(normalizeThinking(event.assistantMessageEvent.content.trim()));
         }
-        thinkingBlock.endTime = Date.now();
       }
-      if (elapsedTimer !== undefined) {
-        clearInterval(elapsedTimer);
-        elapsedTimer = undefined;
-      }
-      if (ctx.mode === "tui") {
-        ctx.ui.setHiddenThinkingLabel();
-      }
+      stopThinking(ctx);
     }
   });
 
-  pi.on("agent_end", () => {
-    if (elapsedTimer !== undefined) {
-      clearInterval(elapsedTimer);
-      elapsedTimer = undefined;
+  pi.on("message_end", (event, ctx) => {
+    if (event.message.role === "assistant") {
+      stopThinking(ctx);
     }
   });
 
-  pi.on("session_shutdown", () => {
-    if (elapsedTimer !== undefined) {
-      clearInterval(elapsedTimer);
-      elapsedTimer = undefined;
-    }
+  pi.on("agent_end", (_event, ctx) => {
+    stopThinking(ctx);
+  });
+
+  pi.on("session_shutdown", (_event, ctx) => {
+    stopThinking(ctx);
   });
 }
 
