@@ -314,7 +314,10 @@ class BashRow implements Component {
   startTimer(onTick: () => void) {
     this.onTick = onTick;
     if (this.timer === undefined) {
-      this.timer = setInterval(() => this.onTick?.(), 1000);
+      this.timer = setInterval(() => {
+        this.invalidate();
+        this.onTick?.();
+      }, 100);
     }
   }
 
@@ -331,7 +334,8 @@ class BashRow implements Component {
   }
 
   render(width: number): string[] {
-    if (this.cachedLines !== undefined && this.cachedWidth === width && this.cachedExpanded === this.expanded) {
+    if (this.result?.status !== "running" && this.cachedLines !== undefined
+      && this.cachedWidth === width && this.cachedExpanded === this.expanded) {
       return this.cachedLines;
     }
 
