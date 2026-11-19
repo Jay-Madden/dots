@@ -31,6 +31,7 @@ RUN apt-get update \
         iproute2 \
         iputils-ping \
         netcat-openbsd \
+        openssh-client \
         openssl \
         tcpdump \
         # Process and filesystem debugging
