@@ -13,6 +13,13 @@ description: REQUIRED TO LOAD BEFORE RUNNING BASH COMMANDS. Rules for constructi
 - Call `bash_permission_state` again after `/reload` or after bash permissions are changed.
 - The loaded state is informational. The bash permission extension remains the enforcement boundary and may request approval.
 
+## Read-only operations
+
+- Before running a read-only command, use the loaded permission rules to choose a command and arguments that do not require approval when a suitable option exists.
+- Use the `read` tool for file contents and allowlisted commands such as `rg`, `ls`, and `jq` for searching, listing, and filtering. Avoid unnecessary interpreters, wrappers, approval-required flags, and temporary-file writes for read-only work.
+- If no suitable approval-free option exists, use the normal approval flow. Do not disguise commands or bypass the permission checks to avoid a prompt.
+- Approval applies only to that tool call; it does not make the command automatically allowed in the future.
+
 ## Command construction
 
 - **IMPORTANT** Prefer native Bash constructs for shell logic instead of embedding Python or Ruby programs in shell commands.

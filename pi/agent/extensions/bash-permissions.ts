@@ -434,7 +434,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: bashPermissionStateToolName,
     label: "Bash Permission State",
-    description: "Load the current bash extension allowlist and approval rules on demand",
+    description: "Load the current bash allowlist and approval rules. For read-only operations, prefer suitable commands and arguments that do not require approval.",
     parameters: Type.Object({}),
     renderShell: "self",
     renderCall(_args, theme, context) {
@@ -457,7 +457,7 @@ export default function (pi: ExtensionAPI) {
       return {
         content: [{
           type: "text",
-          text: bashRules.join("\n"),
+          text: renderBashPermissionPrompt(allowedCommands),
         }],
         details: { ruleCount: bashRules.length },
       };
@@ -511,6 +511,14 @@ export default function (pi: ExtensionAPI) {
       message,
       "Bash command was denied by the user",
     );
+    const outcome = result.approved
+      ? "Bash command required approval and was approved by the user."
+      : `Bash command required approval and was denied. Command was not executed.\nReason: ${result.reason}`;
+    pi.sendMessage({
+      customType: "bash-approval",
+      content: `${outcome}\nTool call ID: ${event.toolCallId}\nCommand: ${command}`,
+      display: false,
+    }, { triggerTurn: false });
     return result.approved
       ? undefined
       : { block: true, reason: result.reason };
@@ -639,6 +647,9 @@ function renderBashPermissionPrompt(allowed: Set<AllowedCommand>): string {
     "Bash permission state:",
     "The bash extension runs the command patterns below without interactive approval.",
     "Each pattern permits any remaining arguments unless approval-required arguments are listed.",
+    "For read-only operations, prefer suitable commands and arguments that do not require approval. Use the read tool for file contents and allowlisted commands such as rg, ls, and jq for searching, listing, and filtering.",
+    "Avoid unnecessary interpreters, wrappers, approval-required flags, and temporary-file writes for read-only work. If no suitable approval-free option exists, use the normal approval flow; do not disguise commands or bypass permission checks.",
+    "Approval applies only to that tool call, not future calls.",
     ...renderAllowedCommandRules(allowed),
     "All other commands, unlisted subcommands, approval-required arguments, parse failures, and file-writing redirects require interactive approval.",
     "Redirection to /dev/null is exempt. Commands in pipelines and compound statements are checked independently.",
