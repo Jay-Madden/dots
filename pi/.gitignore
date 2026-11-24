@@ -1,5 +1,6 @@
 # Ignore internal stuff
 models.json
+/agent/models-store.json
 auth.json
 sessions/
 /agent/local/
