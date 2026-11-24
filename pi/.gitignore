@@ -3,6 +3,10 @@ models.json
 auth.json
 sessions/
 /agent/local/
+agent/trust.json
+agent/skills/linear-cli/
+agent/extensions/atuin.ts
+agent/extensions/web-search.ts
 
 # Logs
 logs
